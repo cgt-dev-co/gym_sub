@@ -6,7 +6,7 @@ A full-stack gym subscription management system with user authentication, subscr
 
 - **Frontend**: React, Vite, TailwindCSS
 - **Backend**: Node.js, Express
-- **Database**: MongoDB with Mongoose
+- **Database**: MySQL with Prisma ORM
 - **Payment**: Stripe
 
 ## Features
