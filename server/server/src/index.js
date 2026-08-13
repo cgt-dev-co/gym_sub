@@ -44,8 +44,32 @@ app.use((req, res) => {
 
 app.use(errorHandler);
 
+const validateEnvironmentVariables = () => {
+  const requiredVars = {
+    STRIPE_SECRET_KEY: 'Stripe secret API key',
+    STRIPE_WEBHOOK_SECRET: 'Stripe webhook signing secret',
+    JWT_SECRET: 'JWT signing secret'
+  };
+
+  const missing = [];
+  for (const [varName, description] of Object.entries(requiredVars)) {
+    if (!process.env[varName] || process.env[varName].trim() === '') {
+      missing.push(`${varName} (${description})`);
+    }
+  }
+
+  if (missing.length > 0) {
+    const errorMessage = `Missing or empty required environment variables:\n  - ${missing.join('\n  - ')}\n\nPlease set these in your .env file before starting the server.`;
+    console.error(errorMessage);
+    process.exit(1);
+  }
+};
+
 const initializeServer = async () => {
   try {
+    // Validate environment variables before proceeding
+    validateEnvironmentVariables();
+
     await prisma.$connect();
     console.log('MySQL connected via Prisma');
 
