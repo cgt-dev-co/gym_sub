@@ -1,0 +1,26 @@
+{
+  "name": "gym-subscription-management",
+  "version": "1.0.0",
+  "description": "Complete gym subscription management system",
+  "scripts": {
+    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "server:dev": "cd server && npm run dev",
+    "client:dev": "cd client && npm run dev",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "build": "cd client && npm run build",
+    "test": "cd server && npm test"
+  },
+  "keywords": [
+    "gym",
+    "subscription",
+    "management"
+  ],
+  "author": "MP",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "node-cron": "^4.6.0"
+  }
+}
