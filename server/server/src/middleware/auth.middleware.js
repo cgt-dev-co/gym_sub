@@ -1,6 +1,34 @@
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
 
+// In-memory cache for user data (TTL: 5 minutes)
+const userCache = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+// In-memory set of blacklisted tokens
+const tokenBlacklist = new Set();
+
+const getUserWithCache = async (userId) => {
+  const cached = userCache.get(userId);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (user) {
+    userCache.set(userId, { data: user, timestamp: Date.now() });
+  }
+  return user;
+};
+
+const revokeToken = (token) => {
+  tokenBlacklist.add(token);
+};
+
+const isTokenRevoked = (token) => {
+  return tokenBlacklist.has(token);
+};
+
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -10,9 +38,14 @@ const authenticate = async (req, res, next) => {
     }
 
     const token = authHeader.substring(7);
+
+    if (isTokenRevoked(token)) {
+      return res.status(401).json({ error: 'Token has been revoked' });
+    }
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+    const user = await getUserWithCache(decoded.userId);
 
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
@@ -26,6 +59,9 @@ const authenticate = async (req, res, next) => {
       address: user.address,
       role: user.role
     };
+
+    req.token = token;
+
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
@@ -45,4 +81,4 @@ const isAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { authenticate, isAdmin };
+module.exports = { authenticate, isAdmin, revokeToken, getUserWithCache };

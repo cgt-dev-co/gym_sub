@@ -108,4 +108,19 @@ const getMe = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, getMe };
+const logout = async (req, res, next) => {
+  try {
+    if (!req.token) {
+      return res.status(400).json({ error: 'No token provided' });
+    }
+
+    const { revokeToken } = require('../middleware/auth.middleware');
+    revokeToken(req.token);
+
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { register, login, getMe, logout };
