@@ -1,6 +1,14 @@
 const errorHandler = (err, req, res, next) => {
   console.error('Error:', err);
 
+  // Prisma validation errors (e.g., invalid input type)
+  if (err.name === 'PrismaClientValidationError') {
+    return res.status(400).json({
+      error: 'Invalid request data',
+      details: err.message
+    });
+  }
+
   // Prisma errors
   if (err.code === 'P2002') {
     return res.status(400).json({

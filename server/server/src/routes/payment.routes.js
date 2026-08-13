@@ -14,7 +14,9 @@ router.post(
   '/create-payment-intent',
   authenticate,
   [
-    body('planId').notEmpty().withMessage('Plan ID is required'),
+    body('planId')
+        .notEmpty().withMessage('Plan ID is required')
+        .isString().withMessage('Plan ID must be a string'),
     validate
   ],
   createPaymentIntent
