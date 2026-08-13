@@ -8,12 +8,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      loadUser()
-    } else {
-      setLoading(false)
-    }
+    loadUser()
   }, [])
 
   const loadUser = async () => {
@@ -21,7 +16,7 @@ export const AuthProvider = ({ children }) => {
       const response = await authService.getMe()
       setUser(response.user)
     } catch (error) {
-      localStorage.removeItem('token')
+      setUser(null)
     } finally {
       setLoading(false)
     }
@@ -29,21 +24,24 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const response = await authService.login(email, password)
-    localStorage.setItem('token', response.token)
     setUser(response.user)
     return response
   }
 
   const register = async (userData) => {
     const response = await authService.register(userData)
-    localStorage.setItem('token', response.token)
     setUser(response.user)
     return response
   }
 
-  const logout = () => {
-    localStorage.removeItem('token')
-    setUser(null)
+  const logout = async () => {
+    try {
+      await authService.logout()
+    } catch (error) {
+      // proceed with local logout even if the server call fails
+    } finally {
+      setUser(null)
+    }
   }
 
   return (

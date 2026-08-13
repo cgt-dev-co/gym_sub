@@ -31,13 +31,11 @@ const isTokenRevoked = (token) => {
 
 const authenticate = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
+    const token = req.cookies?.jwt;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       return res.status(401).json({ error: 'No token provided' });
     }
-
-    const token = authHeader.substring(7);
 
     if (isTokenRevoked(token)) {
       return res.status(401).json({ error: 'Token has been revoked' });

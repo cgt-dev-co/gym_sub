@@ -2,6 +2,13 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
 
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  maxAge: 7 * 24 * 60 * 60 * 1000
+};
+
 const register = async (req, res, next) => {
   try {
     const { email, password, name, phone, address } = req.body;
@@ -24,10 +31,10 @@ const register = async (req, res, next) => {
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
 
+    res.cookie('jwt', token, COOKIE_OPTIONS);
     res.status(201).json({
       message: 'User registered successfully',
-      user: { id: user.id, email: user.email, name: user.name, phone: user.phone, address: user.address, role: user.role, createdAt: user.createdAt },
-      token
+      user: { id: user.id, email: user.email, name: user.name, phone: user.phone, address: user.address, role: user.role, createdAt: user.createdAt }
     });
   } catch (error) {
     next(error);
@@ -56,10 +63,10 @@ const login = async (req, res, next) => {
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
 
+    res.cookie('jwt', token, COOKIE_OPTIONS);
     res.json({
       message: 'Login successful',
-      user: { id: user.id, email: user.email, name: user.name, phone: user.phone, address: user.address, role: user.role, createdAt: user.createdAt },
-      token
+      user: { id: user.id, email: user.email, name: user.name, phone: user.phone, address: user.address, role: user.role, createdAt: user.createdAt }
     });
   } catch (error) {
     next(error);
@@ -117,6 +124,7 @@ const logout = async (req, res, next) => {
     const { revokeToken } = require('../middleware/auth.middleware');
     revokeToken(req.token);
 
+    res.clearCookie('jwt', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' });
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     next(error);
