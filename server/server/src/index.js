@@ -14,6 +14,7 @@ const subscriptionRoutes = require('./routes/subscription.routes');
 const paymentRoutes = require('./routes/payment.routes');
 
 const { errorHandler } = require('./middleware/error.middleware');
+const { cleanupExpiredTokens } = require('./middleware/auth.middleware');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -84,6 +85,8 @@ const initializeServer = async () => {
       console.log(`Server running on port ${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV}`);
     });
+
+    setInterval(() => { cleanupExpiredTokens(); }, 60 * 60 * 1000);
   } catch (error) {
     console.error('Failed to initialize server:', error);
     process.exit(1);

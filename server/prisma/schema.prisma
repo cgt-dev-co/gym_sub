@@ -67,6 +67,15 @@ model Payment {
   subscription Subscription? @relation(fields: [subscriptionId], references: [id])
 }
 
+model TokenBlacklist {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  revokedAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([revokedAt])
+}
+
 enum Role {
   USER
   ADMIN

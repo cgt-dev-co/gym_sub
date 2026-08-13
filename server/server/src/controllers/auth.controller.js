@@ -122,7 +122,7 @@ const logout = async (req, res, next) => {
     }
 
     const { revokeToken } = require('../middleware/auth.middleware');
-    revokeToken(req.token);
+    await revokeToken(req.token);
 
     res.clearCookie('jwt', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' });
     res.json({ message: 'Logged out successfully' });

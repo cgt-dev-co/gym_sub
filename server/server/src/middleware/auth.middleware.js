@@ -5,9 +5,6 @@ const prisma = require('../config/prisma');
 const userCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-// In-memory set of blacklisted tokens
-const tokenBlacklist = new Set();
-
 const getUserWithCache = async (userId) => {
   const cached = userCache.get(userId);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
@@ -21,12 +18,42 @@ const getUserWithCache = async (userId) => {
   return user;
 };
 
-const revokeToken = (token) => {
-  tokenBlacklist.add(token);
+const revokeToken = async (token) => {
+  try {
+    const decoded = jwt.decode(token);
+    const expiresAt = new Date(decoded.exp * 1000);
+
+    await prisma.tokenBlacklist.create({
+      data: { token, expiresAt }
+    });
+  } catch (error) {
+    console.error('Failed to revoke token:', error);
+    throw error;
+  }
 };
 
-const isTokenRevoked = (token) => {
-  return tokenBlacklist.has(token);
+const isTokenRevoked = async (token) => {
+  try {
+    const revoked = await prisma.tokenBlacklist.findUnique({
+      where: { token }
+    });
+    return !!revoked;
+  } catch (error) {
+    console.error('Failed to check token revocation:', error);
+    // Fail securely: treat the token as revoked if the DB check errors
+    return true;
+  }
+};
+
+const cleanupExpiredTokens = async () => {
+  try {
+    const result = await prisma.tokenBlacklist.deleteMany({
+      where: { expiresAt: { lt: new Date() } }
+    });
+    console.log(`Cleaned up ${result.count} expired blacklist entries`);
+  } catch (error) {
+    console.error('Failed to cleanup expired tokens:', error);
+  }
 };
 
 const authenticate = async (req, res, next) => {
@@ -37,7 +64,7 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    if (isTokenRevoked(token)) {
+    if (await isTokenRevoked(token)) {
       return res.status(401).json({ error: 'Token has been revoked' });
     }
 
@@ -79,4 +106,4 @@ const isAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { authenticate, isAdmin, revokeToken, getUserWithCache };
+module.exports = { authenticate, isAdmin, revokeToken, getUserWithCache, cleanupExpiredTokens };
