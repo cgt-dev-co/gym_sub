@@ -86,12 +86,38 @@ const initializeServer = async () => {
       console.log(`Environment: ${process.env.NODE_ENV}`);
     });
 
-    setInterval(() => { cleanupExpiredTokens(); }, 60 * 60 * 1000);
+    const cleanupInterval = setInterval(async () => {
+      try {
+        await cleanupExpiredTokens();
+      } catch (error) {
+        console.error('Unhandled error in token cleanup interval:', error);
+      }
+    }, 60 * 60 * 1000);
+
+    // Store interval ID for graceful shutdown
+    process.cleanupInterval = cleanupInterval;
   } catch (error) {
     console.error('Failed to initialize server:', error);
     process.exit(1);
   }
 };
+
+// Graceful shutdown handlers
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, cleaning up...');
+  if (process.cleanupInterval) {
+    clearInterval(process.cleanupInterval);
+  }
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, cleaning up...');
+  if (process.cleanupInterval) {
+    clearInterval(process.cleanupInterval);
+  }
+  process.exit(0);
+});
 
 initializeServer();
 
