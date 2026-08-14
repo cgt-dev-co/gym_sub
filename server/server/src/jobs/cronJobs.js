@@ -17,13 +17,19 @@ const cron = require('node-cron');
 //   received, delaying process exit. The signal handlers should call stopCronJobs() before
 //   process.exit().
 
+const CRON_TIMEZONE = process.env.CRON_TIMEZONE || 'UTC';
+
 // Print "hello" every 2 hours
 const helloJob = cron.schedule('0 */2 * * *', () => {
-  console.log('hello');
-  console.log(`Cron job executed at: ${new Date().toISOString()}`);
+  try {
+    console.log('hello');
+    console.log(`Cron job executed at: ${new Date().toISOString()}`);
+  } catch (error) {
+    console.error('Error in helloJob cron callback:', error);
+  }
 }, {
   scheduled: true,
-  timezone: "America/New_York"
+  timezone: CRON_TIMEZONE
 });
 
 // Start all cron jobs
