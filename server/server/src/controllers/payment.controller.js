@@ -1,6 +1,27 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const prisma = require('../config/prisma');
 
+// KNOWN BUGS
+// Bug 1 — Webhook is not idempotent: Stripe can deliver the same event more than once.
+//   handlePaymentSuccess() uses updateMany() with no guard, so a duplicate
+//   payment_intent.succeeded delivery will run the update again without error. While this
+//   particular update is safe to repeat, any future logic added here (e.g. sending an email,
+//   crediting a referral) could fire twice. The handler should record processed event IDs and
+//   skip duplicates.
+//
+// Bug 2 — Orphaned PaymentIntent on DB write failure: createPaymentIntent() calls
+//   stripe.paymentIntents.create() first, then prisma.payment.create(). If the DB write
+//   fails (connection error, constraint violation), the PaymentIntent exists in Stripe but
+//   has no corresponding local payment row. The client receives an error but holds a valid
+//   clientSecret, which could allow a retry with no tracking record. The Stripe call should
+//   be made after a successful DB reservation, or the DB record should be created first with
+//   a PENDING placeholder.
+//
+// Bug 3 — Currency hardcoded to USD: the PaymentIntent is created with currency: 'usd' and
+//   the local payment record stores currency: 'USD' unconditionally. If the plan price is
+//   set in a different currency in the future, the Stripe charge and the DB record will be
+//   mismatched. Currency should come from the plan definition or a global config value.
+
 const createPaymentIntent = async (req, res, next) => {
   try {
     const { planId } = req.body;

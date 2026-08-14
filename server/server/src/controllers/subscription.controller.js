@@ -1,5 +1,21 @@
 const prisma = require('../config/prisma');
 
+// KNOWN BUGS
+// Bug 1 — Race condition on concurrent purchase: two simultaneous requests for the same
+//   user can both pass the "no active subscription" check before either creates the row,
+//   resulting in duplicate active subscriptions. The subscription.create and the active
+//   check should be wrapped in a Prisma interactive transaction.
+//
+// Bug 2 — Renewal resets start date to today instead of extending from current end date:
+//   in renewSubscription(), startDate is always set to new Date() (now). If a user renews
+//   before their current period ends they lose the remaining days. The new startDate should
+//   be max(now, subscription.endDate) so renewals always extend from the expiry boundary.
+//
+// Bug 3 — No transaction wrapping purchase: subscription.create and payment.update run as
+//   two separate Prisma calls. If the server crashes between them, the subscription is
+//   activated but the payment row never has its subscriptionId set, leaving the payment
+//   reusable for a second subscription purchase.
+
 const getMySubscription = async (req, res, next) => {
   try {
     const subscription = await prisma.subscription.findFirst({

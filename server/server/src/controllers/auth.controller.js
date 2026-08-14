@@ -2,6 +2,22 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
 
+// KNOWN BUGS
+// Bug 1 — No rate limiting on login endpoint: the /login route has no brute-force
+//   protection. An attacker can send unlimited password guesses against any email
+//   address without being throttled or locked out. A rate limiter (e.g. express-rate-limit)
+//   should be applied to POST /api/auth/login.
+//
+// Bug 2 — JWT_EXPIRES_IN falls back to undefined: if JWT_EXPIRES_IN is not set in .env,
+//   jwt.sign() receives { expiresIn: undefined }, which silently creates a non-expiring
+//   token. The server should validate this env var at startup alongside the other required
+//   variables in validateEnvironmentVariables().
+//
+// Bug 3 — Tokens not invalidated on email/password change: if a user's password is updated
+//   via the profile endpoint, any previously issued JWTs remain valid until they naturally
+//   expire. The user's existing tokens should be revoked (added to the blacklist) whenever
+//   credentials change.
+
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',

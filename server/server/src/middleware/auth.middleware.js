@@ -1,6 +1,23 @@
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
 
+// KNOWN BUGS
+// Bug 1 — In-memory user cache never invalidated on role change: if an admin downgrades a
+//   user's role in the database, getUserWithCache() will continue returning the stale cached
+//   role for up to 5 minutes. Privileged endpoints can still be accessed during the TTL
+//   window. Cache entries must be invalidated whenever a user record is updated.
+//
+// Bug 2 — User cache grows without bound: userCache is a plain Map with no maximum size or
+//   eviction policy. On a long-running server with many distinct users, the cache will
+//   accumulate one entry per user indefinitely, slowly consuming heap memory. Expired entries
+//   are never pruned unless the same userId is requested again.
+//
+// Bug 3 — isTokenRevoked fails open on DB error: when the tokenBlacklist lookup throws, the
+//   catch block logs the error and returns true (treats the token as revoked). This means a
+//   transient DB outage blocks ALL authenticated requests, causing a denial-of-service rather
+//   than a graceful degradation. The failure policy should be reviewed for the specific threat
+//   model of this application.
+
 // In-memory cache for user data (TTL: 5 minutes)
 const userCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
