@@ -14,9 +14,11 @@ model User {
   name      String
   phone     String?
   address   String?
-  role      Role     @default(USER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  role          Role     @default(USER)
+  loginAttempts Int      @default(0)
+  lockUntil     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   subscriptions Subscription[]
   payments      Payment[]

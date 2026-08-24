@@ -6,7 +6,7 @@ require('dotenv').config();
 
 const prisma = require('./config/prisma');
 const seedDatabase = require('./config/seed');
-const { startCronJobs } = require('./jobs/cronJobs');
+const { startCronJobs, stopCronJobs } = require('./jobs/cronJobs');
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const planRoutes = require('./routes/plan.routes');
@@ -52,7 +52,8 @@ const validateEnvironmentVariables = () => {
   const requiredVars = {
     STRIPE_SECRET_KEY: 'Stripe secret API key',
     STRIPE_WEBHOOK_SECRET: 'Stripe webhook signing secret',
-    JWT_SECRET: 'JWT signing secret'
+    JWT_SECRET: 'JWT signing secret',
+    JWT_EXPIRES_IN: 'JWT token expiry (e.g. 7d)'
   };
 
   const missing = [];
@@ -133,6 +134,7 @@ const initializeServer = async () => {
 // Graceful shutdown handlers
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, cleaning up...');
+  stopCronJobs();
   if (process.cleanupInterval) {
     clearInterval(process.cleanupInterval);
   }
@@ -144,6 +146,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, cleaning up...');
+  stopCronJobs();
   if (process.cleanupInterval) {
     clearInterval(process.cleanupInterval);
   }

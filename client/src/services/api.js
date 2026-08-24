@@ -50,8 +50,8 @@ export const subscriptionService = {
   getHistory: () => api.get('/subscriptions/history'),
   purchase: (planId, paymentIntentId) =>
     api.post('/subscriptions/purchase', { planId, paymentIntentId }),
-  renew: (subscriptionId) =>
-    api.post('/subscriptions/renew', { subscriptionId }),
+  renew: (subscriptionId, paymentIntentId) =>
+    api.post('/subscriptions/renew', { subscriptionId, paymentIntentId }),
   cancel: (subscriptionId) =>
     api.post('/subscriptions/cancel', { subscriptionId })
 }

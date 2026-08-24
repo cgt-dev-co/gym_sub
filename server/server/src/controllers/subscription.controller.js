@@ -6,10 +6,9 @@ const prisma = require('../config/prisma');
 //   resulting in duplicate active subscriptions. The subscription.create and the active
 //   check should be wrapped in a Prisma interactive transaction.
 //
-// Bug 2 — Renewal resets start date to today instead of extending from current end date:
-//   in renewSubscription(), startDate is always set to new Date() (now). If a user renews
-//   before their current period ends they lose the remaining days. The new startDate should
-//   be max(now, subscription.endDate) so renewals always extend from the expiry boundary.
+// Bug 2 — FIXED: renewSubscription() now uses max(now, subscription.endDate) as the
+//   new startDate, so users who renew before expiry preserve their remaining days. The
+//   fix is on the startDate assignment inside renewSubscription().
 //
 // Bug 3 — No transaction wrapping purchase: subscription.create and payment.update run as
 //   two separate Prisma calls. If the server crashes between them, the subscription is
@@ -194,7 +193,8 @@ const renewSubscription = async (req, res, next) => {
       return res.status(400).json({ error: 'Payment already used for a different subscription' });
     }
 
-    const startDate = new Date();
+    // Use max(now, current endDate) so a renewal before expiry doesn't lose remaining days
+    const startDate = new Date(Math.max(Date.now(), subscription.endDate?.getTime() || Date.now()));
     const endDate = new Date(startDate);
     if (subscription.plan.duration === 'MONTHLY') endDate.setMonth(endDate.getMonth() + 1);
     else if (subscription.plan.duration === 'QUARTERLY') endDate.setMonth(endDate.getMonth() + 3);

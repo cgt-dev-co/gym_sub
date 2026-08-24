@@ -1,21 +1,14 @@
 const cron = require('node-cron');
 
 // KNOWN BUGS
-// Bug 1 — Timezone hardcoded to America/New_York: the cron schedule uses a fixed timezone
-//   that is not configurable via environment variable. Deployments in other regions will run
-//   jobs at unexpected local times. The timezone should be read from process.env.CRON_TIMEZONE
-//   with a sensible default (e.g. UTC).
+// Bug 1 — FIXED: Timezone is now configurable via CRON_TIMEZONE env var, defaulting to
+//   'UTC'. Set CRON_TIMEZONE in your .env to override for region-specific deployments.
 //
-// Bug 2 — No error handling inside the cron callback: if console.log or any future logic
-//   inside the helloJob callback throws, the exception propagates out of the node-cron
-//   scheduler uncaught. The callback should be wrapped in a try/catch to prevent a single
-//   failed execution from silently stopping future runs.
+// Bug 2 — FIXED: The helloJob callback is wrapped in try/catch so a single failed
+//   execution does not propagate uncaught or silently stop future runs.
 //
-// Bug 3 — stopCronJobs() is exported but never called on shutdown: index.js registers
-//   SIGTERM/SIGINT handlers that clear the token cleanup interval, but neither handler calls
-//   stopCronJobs(). Active cron jobs therefore keep the event loop alive after the signal is
-//   received, delaying process exit. The signal handlers should call stopCronJobs() before
-//   process.exit().
+// Bug 3 — FIXED: index.js SIGTERM/SIGINT handlers now call stopCronJobs() before
+//   process.exit(), ensuring cron jobs are stopped and the event loop drains cleanly.
 
 const CRON_TIMEZONE = process.env.CRON_TIMEZONE || 'UTC';
 

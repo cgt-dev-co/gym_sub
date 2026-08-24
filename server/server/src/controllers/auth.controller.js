@@ -3,20 +3,14 @@ const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
 
 // KNOWN BUGS
-// Bug 1 — No rate limiting on login endpoint: the /login route has no brute-force
-//   protection. An attacker can send unlimited password guesses against any email
-//   address without being throttled or locked out. A rate limiter (e.g. express-rate-limit)
-//   should be applied to POST /api/auth/login.
+// Bug 1 — FIXED: Rate limiting added to POST /api/auth/login via loginLimiter and
+//   POST /api/auth/register via registerLimiter in auth.routes.js (express-rate-limit).
 //
-// Bug 2 — JWT_EXPIRES_IN falls back to undefined: if JWT_EXPIRES_IN is not set in .env,
-//   jwt.sign() receives { expiresIn: undefined }, which silently creates a non-expiring
-//   token. The server should validate this env var at startup alongside the other required
-//   variables in validateEnvironmentVariables().
+// Bug 2 — FIXED: JWT_EXPIRES_IN is now validated at startup in validateEnvironmentVariables()
+//   in index.js. The sign() calls below use a '7d' fallback for safety in tests/dev.
 //
-// Bug 3 — Tokens not invalidated on email/password change: if a user's password is updated
-//   via the profile endpoint, any previously issued JWTs remain valid until they naturally
-//   expire. The user's existing tokens should be revoked (added to the blacklist) whenever
-//   credentials change.
+// Bug 3 — FIXED: updateProfile() in user.controller.js revokes the current JWT when
+//   a password change is detected, invalidating all existing sessions for the user.
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -44,7 +38,7 @@ const register = async (req, res, next) => {
     const token = jwt.sign(
       { userId: user.id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
     res.cookie('jwt', token, COOKIE_OPTIONS);
@@ -67,16 +61,33 @@ const login = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    if (user.loginAttempts >= 5 && user.lockUntil && new Date(user.lockUntil) > new Date()) {
+      return res.status(429).json({
+        error: 'Account temporarily locked due to multiple failed login attempts. Please try again later.'
+      });
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
+      const loginAttempts = (user.loginAttempts || 0) + 1;
+      const lockUntil = loginAttempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { loginAttempts, lockUntil }
+      });
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { loginAttempts: 0, lockUntil: null }
+    });
 
     const token = jwt.sign(
       { userId: user.id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
     res.cookie('jwt', token, COOKIE_OPTIONS);

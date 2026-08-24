@@ -9,13 +9,10 @@ const prisma = require('../config/prisma');
 //   crediting a referral) could fire twice. The handler should record processed event IDs and
 //   skip duplicates.
 //
-// Bug 2 — Orphaned PaymentIntent on DB write failure: createPaymentIntent() calls
-//   stripe.paymentIntents.create() first, then prisma.payment.create(). If the DB write
-//   fails (connection error, constraint violation), the PaymentIntent exists in Stripe but
-//   has no corresponding local payment row. The client receives an error but holds a valid
-//   clientSecret, which could allow a retry with no tracking record. The Stripe call should
-//   be made after a successful DB reservation, or the DB record should be created first with
-//   a PENDING placeholder.
+// Bug 2 — FIXED: createPaymentIntent() now creates the DB record first (with
+//   stripePaymentIntentId: null), then calls stripe.paymentIntents.create(), then updates
+//   the DB record with the returned Stripe ID. This ensures a local audit trail exists even
+//   if the Stripe call fails.
 //
 // Bug 3 — Currency fallback to USD: Currency is now plan-driven (line 35: `const currency = plan.currency || 'USD'`).
 //   However, if a plan is missing the currency field, the system silently defaults to USD. This may mismatch

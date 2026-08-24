@@ -14,6 +14,7 @@ const getAllPlans = async (req, res, next) => {
         name: plan.name,
         duration: plan.duration,
         price: plan.price,
+        currency: plan.currency || 'USD',
         features: plan.features,
         isActive: plan.isActive,
         createdAt: plan.createdAt,
@@ -36,7 +37,7 @@ const getPlanById = async (req, res, next) => {
     }
 
     res.json({
-      plan: { id: plan.id, name: plan.name, duration: plan.duration, price: plan.price, features: plan.features, isActive: plan.isActive, createdAt: plan.createdAt, updatedAt: plan.updatedAt }
+      plan: { id: plan.id, name: plan.name, duration: plan.duration, price: plan.price, currency: plan.currency || 'USD', features: plan.features, isActive: plan.isActive, createdAt: plan.createdAt, updatedAt: plan.updatedAt }
     });
   } catch (error) {
     next(error);
@@ -45,13 +46,14 @@ const getPlanById = async (req, res, next) => {
 
 const createPlan = async (req, res, next) => {
   try {
-    const { name, duration, price, features, isActive } = req.body;
+    const { name, duration, price, currency, features, isActive } = req.body;
 
     const plan = await prisma.plan.create({
       data: {
         name,
         duration,
         price: parseFloat(price),
+        currency: currency ? currency.toUpperCase() : 'USD',
         features: features || [],
         isActive: isActive !== undefined ? isActive : true
       }
@@ -59,7 +61,7 @@ const createPlan = async (req, res, next) => {
 
     res.status(201).json({
       message: 'Plan created successfully',
-      plan: { id: plan.id, name: plan.name, duration: plan.duration, price: plan.price, features: plan.features, isActive: plan.isActive, createdAt: plan.createdAt, updatedAt: plan.updatedAt }
+      plan: { id: plan.id, name: plan.name, duration: plan.duration, price: plan.price, currency: plan.currency, features: plan.features, isActive: plan.isActive, createdAt: plan.createdAt, updatedAt: plan.updatedAt }
     });
   } catch (error) {
     next(error);
@@ -69,7 +71,7 @@ const createPlan = async (req, res, next) => {
 const updatePlan = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, duration, price, features, isActive } = req.body;
+    const { name, duration, price, currency, features, isActive } = req.body;
 
     const existing = await prisma.plan.findUnique({ where: { id } });
 
@@ -81,6 +83,7 @@ const updatePlan = async (req, res, next) => {
     if (name) data.name = name;
     if (duration) data.duration = duration;
     if (price) data.price = parseFloat(price);
+    if (currency) data.currency = currency.toUpperCase();
     if (features) data.features = features;
     if (isActive !== undefined) data.isActive = isActive;
 
@@ -88,7 +91,7 @@ const updatePlan = async (req, res, next) => {
 
     res.json({
       message: 'Plan updated successfully',
-      plan: { id: plan.id, name: plan.name, duration: plan.duration, price: plan.price, features: plan.features, isActive: plan.isActive, createdAt: plan.createdAt, updatedAt: plan.updatedAt }
+      plan: { id: plan.id, name: plan.name, duration: plan.duration, price: plan.price, currency: plan.currency, features: plan.features, isActive: plan.isActive, createdAt: plan.createdAt, updatedAt: plan.updatedAt }
     });
   } catch (error) {
     next(error);

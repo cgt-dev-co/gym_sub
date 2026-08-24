@@ -1,7 +1,8 @@
 const errorHandler = (err, req, res, next) => {
-  console.error('Error:', err);
+  const method = req.method || 'UNKNOWN';
+  const path = req.path || '';
+  console.error(`Error [${method} ${path}]:`, err);
 
-  // Prisma validation errors (e.g., invalid input type)
   if (err.name === 'PrismaClientValidationError') {
     return res.status(400).json({
       error: 'Invalid request data',
@@ -9,11 +10,17 @@ const errorHandler = (err, req, res, next) => {
     });
   }
 
-  // Prisma errors
   if (err.code === 'P2002') {
-    return res.status(400).json({
+    return res.status(409).json({
       error: 'A record with this value already exists',
       field: err.meta?.target
+    });
+  }
+
+  if (err.code === 'P2003') {
+    return res.status(400).json({
+      error: 'Related record not found',
+      field: err.meta?.field_name
     });
   }
 
@@ -21,7 +28,10 @@ const errorHandler = (err, req, res, next) => {
     return res.status(404).json({ error: 'Record not found' });
   }
 
-  // Validation errors
+  if (err.code === 'P2014') {
+    return res.status(400).json({ error: 'The change would violate a required relation' });
+  }
+
   if (err.name === 'ValidationError') {
     return res.status(400).json({
       error: 'Validation failed',
@@ -29,7 +39,6 @@ const errorHandler = (err, req, res, next) => {
     });
   }
 
-  // Default error
   res.status(err.statusCode || 500).json({
     error: err.message || 'Internal server error'
   });

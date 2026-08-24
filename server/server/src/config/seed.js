@@ -17,6 +17,7 @@ const seedDatabase = async () => {
           name: 'Basic Plan',
           duration: 'MONTHLY',
           price: 29.99,
+          currency: 'USD',
           features: ['Access to gym equipment', 'Locker room access', 'Free Wi-Fi', 'Standard hours (6 AM - 10 PM)'],
           isActive: true
         },
@@ -24,6 +25,7 @@ const seedDatabase = async () => {
           name: 'Standard Plan',
           duration: 'QUARTERLY',
           price: 79.99,
+          currency: 'USD',
           features: ['All Basic Plan features', 'Group fitness classes', '1 personal training session per month', '24/7 gym access', 'Towel service'],
           isActive: true
         },
@@ -31,6 +33,7 @@ const seedDatabase = async () => {
           name: 'Premium Plan',
           duration: 'YEARLY',
           price: 299.99,
+          currency: 'USD',
           features: ['All Standard Plan features', 'Unlimited personal training', 'Nutrition consultation', 'Spa and sauna access', 'Guest passes (5 per month)', 'Priority class booking', 'Free parking'],
           isActive: true
         }

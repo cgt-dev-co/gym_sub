@@ -20,6 +20,7 @@ router.post(
   authenticate,
   [
     body('planId').notEmpty().withMessage('Plan ID is required'),
+    body('paymentIntentId').notEmpty().withMessage('Payment intent ID is required'),
     validate
   ],
   purchaseSubscription
@@ -30,6 +31,7 @@ router.post(
   authenticate,
   [
     body('subscriptionId').notEmpty().withMessage('Subscription ID is required'),
+    body('paymentIntentId').notEmpty().withMessage('Payment intent ID is required'),
     validate
   ],
   renewSubscription

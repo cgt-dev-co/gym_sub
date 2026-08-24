@@ -25,6 +25,12 @@ router.post(
       .isIn(['MONTHLY', 'QUARTERLY', 'YEARLY'])
       .withMessage('Invalid duration'),
     body('price').isFloat({ min: 0 }).withMessage('Valid price is required'),
+    body('currency')
+      .optional()
+      .isLength({ min: 3, max: 3 })
+      .isAlpha()
+      .toUpperCase()
+      .withMessage('Currency must be a 3-letter ISO code (e.g. USD, EUR)'),
     validate
   ],
   createPlan
