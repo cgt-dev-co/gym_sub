@@ -3,10 +3,10 @@ const prisma = require('../config/prisma');
 const { LRUCache } = require('lru-cache');
 
 // KNOWN BUGS
-// Bug 1 — In-memory user cache never invalidated on role change: if an admin downgrades a
-//   user's role in the database, getUserWithCache() will continue returning the stale cached
-//   role for up to 5 minutes. Privileged endpoints can still be accessed during the TTL
-//   window. Cache entries must be invalidated whenever a user record is updated.
+// Bug 1 — FIXED: authenticate() now validates cached role/isSuspended against the live
+//   database on every request. If a mismatch is detected (e.g., admin demoted a user),
+//   the cache entry is invalidated and the fresh DB record is used immediately. Privileged
+//   access is revoked on the very next request after a role change.
 //
 // Bug 2 — FIXED: userCache is now an LRUCache (max 10,000 entries, 5-minute TTL).
 //   LRU eviction automatically removes the least-recently-used entry when the cap is
@@ -18,23 +18,13 @@ const { LRUCache } = require('lru-cache');
 
 // Cache Invalidation Contract:
 // ────────────────────────────────────────────────────────────────────────────
-// getUserWithCache() maintains an in-memory cache with a 5-minute TTL to
-// reduce database queries. However, this introduces a risk: if a user record
-// is modified (e.g., role downgraded), the cache is stale until natural
-// expiration.
+// authenticate() automatically detects stale cache by comparing the cached
+// user's role and isSuspended against a fresh DB query on every request.
+// If they differ, the cache entry is cleared and the fresh record is used.
 //
-// ANY endpoint or service that modifies a user record MUST call
-// clearUserCache(userId) immediately after the update to invalidate the
-// cache entry. This ensures that subsequent authenticate() calls fetch
-// the fresh user data from the database.
-//
-// Failure to invalidate the cache can allow a demoted user to retain their
-// old privileges (e.g., ADMIN role) for up to 5 minutes.
-//
-// Common update patterns:
-// - After prisma.user.update({ where: { id }, data: {...} }), call clearUserCache(id)
-// - After any role/permission change, call clearUserCache(id)
-// - After email/password updates, consider revoking active tokens as well
+// Callers that update user records should still call clearUserCache(userId)
+// as an optimization (avoids one extra validation query on the next request),
+// but correctness no longer depends on them doing so.
 // ────────────────────────────────────────────────────────────────────────────
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -42,6 +32,10 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 // In-memory LRU cache for user data: max 10,000 entries, 5-minute TTL.
 // Least-recently-used entries are evicted when the cap is reached; expired
 // entries are never returned. Exported as _userCache for testing only.
+//
+// SECURITY: authenticate() validates cached role/isSuspended against the DB on
+// every request, so stale privilege escalations are caught immediately regardless
+// of whether callers remember to call clearUserCache().
 const userCache = new LRUCache({
   max: 10000,
   ttl: CACHE_TTL_MS,
@@ -140,13 +134,28 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
+    // Validate cached role/isSuspended against the current DB state. If a mismatch
+    // is found (e.g., the user was demoted or suspended since the cache was populated),
+    // discard the stale entry and use the fresh record for this request.
+    const freshUser = await prisma.user.findUnique({ where: { id: user.id } });
+    if (!freshUser) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    const isStale = user.role !== freshUser.role || user.isSuspended !== freshUser.isSuspended;
+    if (isStale) {
+      clearUserCache(decoded.userId);
+    }
+
+    const effectiveUser = isStale ? freshUser : user;
+
     req.user = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      phone: user.phone,
-      address: user.address,
-      role: user.role
+      id: effectiveUser.id,
+      email: effectiveUser.email,
+      name: effectiveUser.name,
+      phone: effectiveUser.phone,
+      address: effectiveUser.address,
+      role: effectiveUser.role
     };
 
     req.token = token;

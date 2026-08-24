@@ -141,13 +141,13 @@ describe('authenticate middleware', () => {
 
   it('should allow authenticated request through when isTokenRevoked DB error occurs', async () => {
     const dbError = new Error('MySQL connection timeout');
+    const mockUser = { id: 'user-1', email: 'alice@example.com', name: 'Alice', phone: null, address: null, role: 'USER', isSuspended: false };
     prisma.tokenBlacklist.findUnique.mockRejectedValueOnce(dbError);
     jwt.verify.mockReturnValueOnce({ userId: 'user-1' });
     clearUserCache('user-1');
-    prisma.user.findUnique.mockResolvedValueOnce({
-      id: 'user-1', email: 'alice@example.com', name: 'Alice',
-      phone: null, address: null, role: 'USER'
-    });
+    prisma.user.findUnique
+      .mockResolvedValueOnce(mockUser) // getUserWithCache (cache miss)
+      .mockResolvedValueOnce(mockUser); // fresh validation query
 
     const mockReq = { cookies: { jwt: 'valid-token' } };
     const mockRes = { status: jest.fn().mockReturnThis(), json: jest.fn() };
@@ -177,13 +177,13 @@ describe('authenticate middleware', () => {
   });
 
   it('should call next() when token is valid and user exists', async () => {
+    const mockUser = { id: 'user-1', email: 'alice@example.com', name: 'Alice', phone: null, address: null, role: 'USER', isSuspended: false };
     prisma.tokenBlacklist.findUnique.mockResolvedValueOnce(null);
     jwt.verify.mockReturnValueOnce({ userId: 'user-1' });
     clearUserCache('user-1');
-    prisma.user.findUnique.mockResolvedValueOnce({
-      id: 'user-1', email: 'alice@example.com', name: 'Alice',
-      phone: null, address: null, role: 'USER'
-    });
+    prisma.user.findUnique
+      .mockResolvedValueOnce(mockUser) // getUserWithCache (cache miss)
+      .mockResolvedValueOnce(mockUser); // fresh validation query
 
     const mockReq = { cookies: { jwt: 'valid-token' } };
     const mockRes = { status: jest.fn().mockReturnThis(), json: jest.fn() };
@@ -193,5 +193,41 @@ describe('authenticate middleware', () => {
 
     expect(mockNext).toHaveBeenCalledWith();
     expect(mockReq.user.role).toBe('USER');
+  });
+
+  it('should detect stale cache and use fresh data when role is downgraded between requests', async () => {
+    const adminUser = { id: 'user-1', email: 'eve@example.com', name: 'Eve', phone: null, address: null, role: 'ADMIN', isSuspended: false };
+    const demotedUser = { id: 'user-1', email: 'eve@example.com', name: 'Eve', phone: null, address: null, role: 'USER', isSuspended: false };
+
+    // First request: user is ADMIN, cold cache
+    prisma.tokenBlacklist.findUnique.mockResolvedValueOnce(null);
+    jwt.verify.mockReturnValueOnce({ userId: 'user-1' });
+    clearUserCache('user-1');
+    prisma.user.findUnique
+      .mockResolvedValueOnce(adminUser)  // getUserWithCache (cache miss) → caches adminUser
+      .mockResolvedValueOnce(adminUser); // validation query → roles match, no invalidation
+
+    const mockReq1 = { cookies: { jwt: 'valid-token' } };
+    const mockRes1 = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const mockNext1 = jest.fn();
+
+    await authenticate(mockReq1, mockRes1, mockNext1);
+    expect(mockReq1.user.role).toBe('ADMIN');
+    expect(mockNext1).toHaveBeenCalledWith();
+
+    // Second request: role downgraded in DB, cache still holds stale ADMIN record
+    prisma.tokenBlacklist.findUnique.mockResolvedValueOnce(null);
+    jwt.verify.mockReturnValueOnce({ userId: 'user-1' });
+    // getUserWithCache returns cache hit — no findUnique call
+    prisma.user.findUnique.mockResolvedValueOnce(demotedUser); // validation query → mismatch!
+
+    const mockReq2 = { cookies: { jwt: 'valid-token' } };
+    const mockRes2 = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const mockNext2 = jest.fn();
+
+    await authenticate(mockReq2, mockRes2, mockNext2);
+
+    expect(mockReq2.user.role).toBe('USER');
+    expect(mockNext2).toHaveBeenCalledWith();
   });
 });
