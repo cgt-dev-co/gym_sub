@@ -113,11 +113,12 @@ describe('isTokenRevoked', () => {
     jest.clearAllMocks();
   });
 
-  it('should throw error when tokenBlacklist query fails (fail open)', async () => {
+  it('should return false when tokenBlacklist query fails (graceful degradation)', async () => {
     const dbError = new Error('MySQL connection failed');
     prisma.tokenBlacklist.findUnique.mockRejectedValueOnce(dbError);
 
-    await expect(isTokenRevoked('some-token')).rejects.toThrow('MySQL connection failed');
+    const result = await isTokenRevoked('some-token');
+    expect(result).toBe(false);
   });
 
   it('should return false when token is not revoked', async () => {
@@ -138,21 +139,25 @@ describe('authenticate middleware', () => {
     jest.clearAllMocks();
   });
 
-  it('should return 500 when isTokenRevoked throws DB error', async () => {
+  it('should allow authenticated request through when isTokenRevoked DB error occurs', async () => {
     const dbError = new Error('MySQL connection timeout');
     prisma.tokenBlacklist.findUnique.mockRejectedValueOnce(dbError);
+    jwt.verify.mockReturnValueOnce({ userId: 'user-1' });
+    clearUserCache('user-1');
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: 'user-1', email: 'alice@example.com', name: 'Alice',
+      phone: null, address: null, role: 'USER'
+    });
 
     const mockReq = { cookies: { jwt: 'valid-token' } };
-    const mockRes = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn().mockReturnThis()
-    };
+    const mockRes = { status: jest.fn().mockReturnThis(), json: jest.fn() };
     const mockNext = jest.fn();
 
     await authenticate(mockReq, mockRes, mockNext);
 
-    expect(mockRes.status).toHaveBeenCalledWith(500);
-    expect(mockRes.json).toHaveBeenCalledWith({ error: 'Authentication failed' });
+    expect(mockNext).toHaveBeenCalledWith();
+    expect(mockRes.status).not.toHaveBeenCalledWith(500);
+    expect(mockReq.user.role).toBe('USER');
   });
 
   it('should return 401 when token is revoked', async () => {

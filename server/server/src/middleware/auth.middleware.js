@@ -12,11 +12,9 @@ const { LRUCache } = require('lru-cache');
 //   LRU eviction automatically removes the least-recently-used entry when the cap is
 //   reached; expired entries are never returned and are purged lazily on access.
 //
-// Bug 3 — isTokenRevoked fails open on DB error: when the tokenBlacklist lookup throws, the
-//   catch block logs the error and returns true (treats the token as revoked). This means a
-//   transient DB outage blocks ALL authenticated requests, causing a denial-of-service rather
-//   than a graceful degradation. The failure policy should be reviewed for the specific threat
-//   model of this application.
+// Bug 3 — FIXED: isTokenRevoked now returns false on DB error (graceful degradation).
+//   A transient DB outage no longer blocks authenticated requests; revocation checks
+//   are temporarily skipped rather than causing a 500 cascade for all users.
 
 // Cache Invalidation Contract:
 // ────────────────────────────────────────────────────────────────────────────
@@ -88,13 +86,16 @@ const isTokenRevoked = async (token) => {
     });
     return !!revoked;
   } catch (error) {
-    // Log the error and let it propagate; the authenticate() middleware will catch it
-    // and return 500. Failing closed (returning true) would turn transient DB outages
-    // into denial-of-service for all authenticated users. Clients can distinguish:
-    // - 401: token is invalid/revoked
-    // - 500: service unavailable (DB error)
+    // Log the error but do not propagate it. If the tokenBlacklist check fails
+    // (e.g., transient DB outage), assume the token is NOT revoked to allow
+    // authenticated requests to proceed. This is a graceful degradation: users
+    // remain able to access the application; revocation checks are temporarily
+    // skipped rather than blocking all traffic.
+    //
+    // Revoked tokens in the database are authoritative; a missed check is lower
+    // risk than rejecting all authenticated requests during an outage.
     console.error('Failed to check token revocation:', error);
-    throw error;
+    return false;
   }
 };
 
