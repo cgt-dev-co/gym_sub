@@ -5,7 +5,9 @@ const {
   getPlanById,
   createPlan,
   updatePlan,
-  deletePlan
+  deletePlan,
+  comparePlans,
+  getPlanStats
 } = require('../controllers/plan.controller');
 const { authenticate, isAdmin } = require('../middleware/auth.middleware');
 const { validate } = require('../middleware/validation.middleware');
@@ -13,7 +15,9 @@ const { validate } = require('../middleware/validation.middleware');
 const router = express.Router();
 
 router.get('/', getAllPlans);
+router.get('/compare', comparePlans);
 router.get('/:id', getPlanById);
+router.get('/:id/stats', authenticate, isAdmin, getPlanStats);
 
 router.post(
   '/',

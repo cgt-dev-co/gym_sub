@@ -264,4 +264,162 @@ const cancelSubscription = async (req, res, next) => {
   }
 };
 
-module.exports = { getMySubscription, getSubscriptionHistory, purchaseSubscription, renewSubscription, cancelSubscription };
+const pauseSubscription = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { subscriptionId, pauseDays } = req.body;
+
+    if (!pauseDays || pauseDays < 1 || pauseDays > 30) {
+      return res.status(400).json({ error: 'Pause duration must be 1–30 days' });
+    }
+
+    const subscription = await prisma.subscription.findFirst({
+      where: { id: subscriptionId, userId, status: 'ACTIVE' }
+    });
+
+    if (!subscription) {
+      return res.status(404).json({ error: 'Active subscription not found' });
+    }
+
+    if (subscription.pausedAt) {
+      return res.status(400).json({ error: 'Subscription is already paused' });
+    }
+
+    const resumeDate = new Date();
+    resumeDate.setDate(resumeDate.getDate() + parseInt(pauseDays));
+
+    const newEndDate = new Date(subscription.endDate);
+    newEndDate.setDate(newEndDate.getDate() + parseInt(pauseDays));
+
+    const updated = await prisma.subscription.update({
+      where: { id: subscriptionId },
+      data: {
+        status: 'PAUSED',
+        pausedAt: new Date(),
+        resumeDate,
+        endDate: newEndDate
+      },
+      include: { plan: true }
+    });
+
+    await prisma.notification.create({
+      data: {
+        userId,
+        title: 'Subscription Paused',
+        message: `Your subscription has been paused for ${pauseDays} days. It will resume on ${resumeDate.toLocaleDateString()} and your end date has been extended accordingly.`,
+        type: 'INFO'
+      }
+    });
+
+    res.json({
+      message: `Subscription paused for ${pauseDays} days`,
+      subscription: {
+        id: updated.id,
+        status: updated.status,
+        pausedAt: updated.pausedAt,
+        resumeDate: updated.resumeDate,
+        endDate: updated.endDate,
+        plan: { name: updated.plan.name }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resumeSubscription = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { subscriptionId } = req.body;
+
+    const subscription = await prisma.subscription.findFirst({
+      where: { id: subscriptionId, userId, status: 'PAUSED' }
+    });
+
+    if (!subscription) {
+      return res.status(404).json({ error: 'Paused subscription not found' });
+    }
+
+    const pausedAt = new Date(subscription.pausedAt);
+    const now = new Date();
+    const daysUsed = Math.floor((now - pausedAt) / (1000 * 60 * 60 * 24));
+    const daysAllocated = Math.floor((new Date(subscription.resumeDate) - pausedAt) / (1000 * 60 * 60 * 24));
+    const daysUnused = Math.max(0, daysAllocated - daysUsed);
+
+    const newEndDate = new Date(subscription.endDate);
+    newEndDate.setDate(newEndDate.getDate() - daysUnused);
+
+    const updated = await prisma.subscription.update({
+      where: { id: subscriptionId },
+      data: { status: 'ACTIVE', pausedAt: null, resumeDate: null, endDate: newEndDate },
+      include: { plan: true }
+    });
+
+    res.json({
+      message: 'Subscription resumed',
+      subscription: {
+        id: updated.id,
+        status: updated.status,
+        endDate: updated.endDate,
+        plan: { name: updated.plan.name }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getSubscriptionHealth = async (req, res, next) => {
+  try {
+    const subscription = await prisma.subscription.findFirst({
+      where: { userId: req.user.id, status: { in: ['ACTIVE', 'PAUSED'] } },
+      include: { plan: true },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!subscription) {
+      return res.json({ health: null });
+    }
+
+    const now = new Date();
+    const daysRemaining = Math.max(0, Math.ceil((new Date(subscription.endDate) - now) / (1000 * 60 * 60 * 24)));
+    const totalDays = subscription.plan.duration === 'MONTHLY' ? 30 : subscription.plan.duration === 'QUARTERLY' ? 90 : 365;
+    const percentUsed = Math.min(100, Math.round(((totalDays - daysRemaining) / totalDays) * 100));
+
+    const workoutsThisMonth = await prisma.workoutLog.count({
+      where: {
+        userId: req.user.id,
+        logDate: { gte: new Date(now.getFullYear(), now.getMonth(), 1) }
+      }
+    });
+
+    const classesThisMonth = await prisma.classBooking.count({
+      where: {
+        userId: req.user.id,
+        status: 'CONFIRMED',
+        gymClass: { schedule: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } }
+      }
+    });
+
+    res.json({
+      health: {
+        daysRemaining,
+        percentUsed,
+        workoutsThisMonth,
+        classesThisMonth,
+        status: subscription.status,
+        isPaused: subscription.status === 'PAUSED',
+        pausedAt: subscription.pausedAt,
+        resumeDate: subscription.resumeDate,
+        warningLevel: daysRemaining <= 7 ? 'critical' : daysRemaining <= 14 ? 'warning' : 'good'
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  getMySubscription, getSubscriptionHistory, purchaseSubscription, renewSubscription, cancelSubscription,
+  pauseSubscription, resumeSubscription, getSubscriptionHealth
+};

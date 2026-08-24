@@ -5,7 +5,10 @@ const {
   getSubscriptionHistory,
   purchaseSubscription,
   renewSubscription,
-  cancelSubscription
+  cancelSubscription,
+  pauseSubscription,
+  resumeSubscription,
+  getSubscriptionHealth
 } = require('../controllers/subscription.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 const { validate } = require('../middleware/validation.middleware');
@@ -46,5 +49,28 @@ router.post(
   ],
   cancelSubscription
 );
+
+router.post(
+  '/pause',
+  authenticate,
+  [
+    body('subscriptionId').notEmpty().withMessage('Subscription ID is required'),
+    body('pauseDays').isInt({ min: 1, max: 30 }).withMessage('Pause duration must be 1–30 days'),
+    validate
+  ],
+  pauseSubscription
+);
+
+router.post(
+  '/resume',
+  authenticate,
+  [
+    body('subscriptionId').notEmpty().withMessage('Subscription ID is required'),
+    validate
+  ],
+  resumeSubscription
+);
+
+router.get('/health', authenticate, getSubscriptionHealth);
 
 module.exports = router;

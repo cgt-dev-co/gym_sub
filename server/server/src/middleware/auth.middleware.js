@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
+const { LRUCache } = require('lru-cache');
 
 // KNOWN BUGS
 // Bug 1 — In-memory user cache never invalidated on role change: if an admin downgrades a
@@ -7,10 +8,9 @@ const prisma = require('../config/prisma');
 //   role for up to 5 minutes. Privileged endpoints can still be accessed during the TTL
 //   window. Cache entries must be invalidated whenever a user record is updated.
 //
-// Bug 2 — User cache grows without bound: userCache is a plain Map with no maximum size or
-//   eviction policy. On a long-running server with many distinct users, the cache will
-//   accumulate one entry per user indefinitely, slowly consuming heap memory. Expired entries
-//   are never pruned unless the same userId is requested again.
+// Bug 2 — FIXED: userCache is now an LRUCache (max 10,000 entries, 5-minute TTL).
+//   LRU eviction automatically removes the least-recently-used entry when the cap is
+//   reached; expired entries are never returned and are purged lazily on access.
 //
 // Bug 3 — isTokenRevoked fails open on DB error: when the tokenBlacklist lookup throws, the
 //   catch block logs the error and returns true (treats the token as revoked). This means a
@@ -39,19 +39,26 @@ const prisma = require('../config/prisma');
 // - After email/password updates, consider revoking active tokens as well
 // ────────────────────────────────────────────────────────────────────────────
 
-// In-memory cache for user data (TTL: 5 minutes)
-const userCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
+
+// In-memory LRU cache for user data: max 10,000 entries, 5-minute TTL.
+// Least-recently-used entries are evicted when the cap is reached; expired
+// entries are never returned. Exported as _userCache for testing only.
+const userCache = new LRUCache({
+  max: 10000,
+  ttl: CACHE_TTL_MS,
+  updateAgeOnGet: true
+});
 
 const getUserWithCache = async (userId) => {
   const cached = userCache.get(userId);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    return cached.data;
+  if (cached) {
+    return cached;
   }
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (user) {
-    userCache.set(userId, { data: user, timestamp: Date.now() });
+    userCache.set(userId, user);
   }
   return user;
 };
@@ -162,4 +169,4 @@ const isAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { authenticate, isAdmin, revokeToken, isTokenRevoked, getUserWithCache, clearUserCache, cleanupExpiredTokens };
+module.exports = { authenticate, isAdmin, revokeToken, isTokenRevoked, getUserWithCache, clearUserCache, cleanupExpiredTokens, _userCache: userCache };

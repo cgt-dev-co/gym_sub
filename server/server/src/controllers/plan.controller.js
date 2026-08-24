@@ -116,4 +116,69 @@ const deletePlan = async (req, res, next) => {
   }
 };
 
-module.exports = { getAllPlans, getPlanById, createPlan, updatePlan, deletePlan };
+const comparePlans = async (req, res, next) => {
+  try {
+    const { ids } = req.query;
+    if (!ids) return res.status(400).json({ error: 'Provide plan IDs as ?ids=a,b,c' });
+
+    const planIds = ids.split(',').map(id => id.trim()).filter(Boolean);
+    if (planIds.length < 2 || planIds.length > 4) {
+      return res.status(400).json({ error: 'Compare 2–4 plans at a time' });
+    }
+
+    const plans = await prisma.plan.findMany({ where: { id: { in: planIds } } });
+
+    const planMap = Object.fromEntries(plans.map(p => [p.id, p]));
+    const ordered = planIds.map(id => planMap[id]).filter(Boolean);
+
+    const allFeatures = [...new Set(ordered.flatMap(p => p.features || []))];
+
+    const comparison = ordered.map(plan => ({
+      id: plan.id,
+      name: plan.name,
+      price: plan.price,
+      duration: plan.duration,
+      currency: plan.currency || 'USD',
+      isActive: plan.isActive,
+      features: plan.features || [],
+      featureMatrix: Object.fromEntries(allFeatures.map(f => [f, (plan.features || []).includes(f)]))
+    }));
+
+    res.json({ comparison, allFeatures });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getPlanStats = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const plan = await prisma.plan.findUnique({ where: { id } });
+    if (!plan) return res.status(404).json({ error: 'Plan not found' });
+
+    const [totalSubscriptions, activeSubscriptions, totalRevenue] = await Promise.all([
+      prisma.subscription.count({ where: { planId: id } }),
+      prisma.subscription.count({ where: { planId: id, status: 'ACTIVE' } }),
+      prisma.payment.aggregate({
+        where: { status: 'COMPLETED', subscription: { planId: id } },
+        _sum: { amount: true }
+      })
+    ]);
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const recentSubscriptions = await prisma.subscription.count({
+      where: { planId: id, createdAt: { gte: thirtyDaysAgo } }
+    });
+
+    res.json({
+      plan: { id: plan.id, name: plan.name, price: plan.price, duration: plan.duration },
+      stats: { totalSubscriptions, activeSubscriptions, recentSubscriptions, totalRevenue: totalRevenue._sum.amount || 0 }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { getAllPlans, getPlanById, createPlan, updatePlan, deletePlan, comparePlans, getPlanStats };

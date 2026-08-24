@@ -105,4 +105,110 @@ const updateProfile = async (req, res, next) => {
   }
 };
 
-module.exports = { getProfile, updateProfile };
+const getActivitySummary = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [workouts, classBookings, subscription] = await Promise.all([
+      prisma.workoutLog.findMany({
+        where: { userId, logDate: { gte: thirtyDaysAgo } },
+        select: { duration: true, logDate: true },
+        orderBy: { logDate: 'asc' }
+      }),
+      prisma.classBooking.count({
+        where: { userId, status: 'CONFIRMED', createdAt: { gte: thirtyDaysAgo } }
+      }),
+      prisma.subscription.findFirst({
+        where: { userId, status: 'ACTIVE' },
+        include: { plan: true }
+      })
+    ]);
+
+    const totalWorkoutMinutes = workouts.reduce((sum, w) => sum + (w.duration || 0), 0);
+    const workoutDays = new Set(workouts.map(w => new Date(w.logDate).toDateString())).size;
+
+    const weeklyBreakdown = {};
+    for (const w of workouts) {
+      const d = new Date(w.logDate);
+      const weekStart = new Date(d);
+      weekStart.setDate(d.getDate() - d.getDay());
+      const key = weekStart.toDateString();
+      if (!weeklyBreakdown[key]) weeklyBreakdown[key] = { count: 0, minutes: 0 };
+      weeklyBreakdown[key].count++;
+      weeklyBreakdown[key].minutes += w.duration || 0;
+    }
+
+    res.json({
+      activity: {
+        totalWorkouts: workouts.length,
+        workoutDays,
+        totalWorkoutMinutes,
+        avgWorkoutMinutes: workouts.length ? Math.round(totalWorkoutMinutes / workouts.length) : 0,
+        classesAttended: classBookings,
+        weeklyBreakdown: Object.entries(weeklyBreakdown).map(([week, v]) => ({ week, ...v })),
+        hasActiveSubscription: !!subscription,
+        planName: subscription?.plan?.name || null
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateAvatar = async (req, res, next) => {
+  try {
+    const { avatarUrl } = req.body;
+
+    if (avatarUrl && !/^https?:\/\/.+/.test(avatarUrl)) {
+      return res.status(400).json({ error: 'Avatar URL must be a valid http/https URL' });
+    }
+
+    const user = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { avatarUrl: avatarUrl || null },
+      select: { id: true, name: true, email: true, avatarUrl: true }
+    });
+
+    clearUserCache(req.user.id);
+    res.json({ message: 'Avatar updated', user });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteAccount = async (req, res, next) => {
+  try {
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ error: 'Password confirmation required' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const { revokeToken } = require('../middleware/auth.middleware');
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(400).json({ error: 'Incorrect password' });
+    }
+
+    await prisma.subscription.updateMany({
+      where: { userId: user.id, status: 'ACTIVE' },
+      data: { status: 'CANCELLED' }
+    });
+
+    if (req.token) await revokeToken(req.token);
+
+    await prisma.user.delete({ where: { id: user.id } });
+    res.clearCookie('jwt', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' });
+    res.json({ message: 'Account deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { getProfile, updateProfile, getActivitySummary, updateAvatar, deleteAccount };

@@ -156,4 +156,123 @@ const getPaymentHistory = async (req, res, next) => {
   }
 };
 
-module.exports = { createPaymentIntent, handleWebhook, getPaymentHistory };
+const getPaymentSummary = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const [total, byStatus, recentPayments] = await Promise.all([
+      prisma.payment.aggregate({
+        where: { userId, status: 'COMPLETED' },
+        _sum: { amount: true },
+        _count: { id: true }
+      }),
+      prisma.payment.groupBy({
+        by: ['status'],
+        where: { userId },
+        _count: { status: true },
+        _sum: { amount: true }
+      }),
+      prisma.payment.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+        select: { id: true, amount: true, currency: true, status: true, createdAt: true, paymentMethod: true }
+      })
+    ]);
+
+    const statusBreakdown = Object.fromEntries(
+      byStatus.map(s => [s.status, { count: s._count.status, total: s._sum.amount || 0 }])
+    );
+
+    res.json({
+      summary: {
+        totalSpent: total._sum.amount || 0,
+        totalPayments: total._count.id,
+        statusBreakdown,
+        recentPayments
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getPaymentReceipt = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const payment = await prisma.payment.findFirst({
+      where: { id, userId: req.user.id },
+      include: {
+        subscription: { include: { plan: true } },
+        user: { select: { name: true, email: true } }
+      }
+    });
+
+    if (!payment) return res.status(404).json({ error: 'Payment not found' });
+
+    const receipt = {
+      receiptNumber: `RCP-${payment.id.slice(-8).toUpperCase()}`,
+      issuedAt: payment.createdAt,
+      customer: payment.user,
+      amount: payment.amount,
+      currency: payment.currency,
+      status: payment.status,
+      paymentMethod: payment.paymentMethod,
+      stripePaymentIntentId: payment.stripePaymentIntentId,
+      plan: payment.subscription?.plan ? {
+        name: payment.subscription.plan.name,
+        duration: payment.subscription.plan.duration,
+        startDate: payment.subscription.startDate,
+        endDate: payment.subscription.endDate
+      } : null
+    };
+
+    res.json({ receipt });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getAdminPaymentAnalytics = async (req, res, next) => {
+  try {
+    const { from, to } = req.query;
+    const where = { status: 'COMPLETED' };
+    if (from || to) {
+      where.createdAt = {};
+      if (from) where.createdAt.gte = new Date(from);
+      if (to) where.createdAt.lte = new Date(to);
+    }
+
+    const [revenue, byMethod, failureRate] = await Promise.all([
+      prisma.payment.aggregate({ where, _sum: { amount: true }, _count: { id: true } }),
+      prisma.payment.groupBy({
+        by: ['paymentMethod'],
+        where,
+        _count: { paymentMethod: true },
+        _sum: { amount: true }
+      }),
+      prisma.payment.groupBy({
+        by: ['status'],
+        _count: { status: true }
+      })
+    ]);
+
+    const statusCounts = Object.fromEntries(failureRate.map(s => [s.status, s._count.status]));
+    const totalAttempts = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+
+    res.json({
+      analytics: {
+        totalRevenue: revenue._sum.amount || 0,
+        totalTransactions: revenue._count.id,
+        byMethod,
+        failureRate: totalAttempts > 0 ? ((statusCounts.FAILED || 0) / totalAttempts * 100).toFixed(1) : '0.0',
+        statusBreakdown: statusCounts
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { createPaymentIntent, handleWebhook, getPaymentHistory, getPaymentSummary, getPaymentReceipt, getAdminPaymentAnalytics };

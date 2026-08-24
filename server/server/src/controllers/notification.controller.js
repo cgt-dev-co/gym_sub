@@ -104,4 +104,68 @@ const broadcastNotification = async (req, res, next) => {
   }
 };
 
-module.exports = { getNotifications, getUnreadCount, markRead, markAllRead, deleteNotification, broadcastNotification };
+const deleteAllNotifications = async (req, res, next) => {
+  try {
+    const { count } = await prisma.notification.deleteMany({ where: { userId: req.user.id } });
+    res.json({ message: `Deleted ${count} notifications` });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getNotificationsByType = async (req, res, next) => {
+  try {
+    const { type } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const validTypes = ['INFO', 'SUCCESS', 'WARNING', 'ERROR'];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ error: 'Invalid notification type' });
+    }
+
+    const [notifications, total] = await Promise.all([
+      prisma.notification.findMany({
+        where: { userId: req.user.id, type },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.notification.count({ where: { userId: req.user.id, type } })
+    ]);
+
+    res.json({ notifications, total, page: parseInt(page), limit: parseInt(limit) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getNotificationSummary = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const [total, unread, byType] = await Promise.all([
+      prisma.notification.count({ where: { userId } }),
+      prisma.notification.count({ where: { userId, isRead: false } }),
+      prisma.notification.groupBy({
+        by: ['type'],
+        where: { userId },
+        _count: { type: true }
+      })
+    ]);
+
+    const typeBreakdown = {};
+    for (const row of byType) {
+      typeBreakdown[row.type] = row._count.type;
+    }
+
+    res.json({ summary: { total, unread, typeBreakdown } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  getNotifications, getUnreadCount, markRead, markAllRead, deleteNotification, broadcastNotification,
+  deleteAllNotifications, getNotificationsByType, getNotificationSummary
+};

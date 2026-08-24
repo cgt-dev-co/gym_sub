@@ -8,7 +8,7 @@ jest.mock('jsonwebtoken', () => ({
   decode: jest.fn()
 }));
 
-const { getUserWithCache, clearUserCache, isTokenRevoked, authenticate } = require('../server/src/middleware/auth.middleware');
+const { getUserWithCache, clearUserCache, isTokenRevoked, authenticate, _userCache } = require('../server/src/middleware/auth.middleware');
 const prisma = require('../server/src/config/prisma');
 const jwt = require('jsonwebtoken');
 
@@ -72,6 +72,39 @@ describe('getUserWithCache and clearUserCache', () => {
     const freshResult = await getUserWithCache('user-1');
     expect(freshResult.role).toBe('USER');
     expect(prisma.user.findUnique).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('LRU cache configuration and eviction', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    _userCache.clear();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('should have max size of 10,000 and TTL of 5 minutes', () => {
+    expect(_userCache.max).toBe(10000);
+    expect(_userCache.ttl).toBe(5 * 60 * 1000);
+  });
+
+  it('should evict the oldest entry when max size is exceeded', () => {
+    for (let i = 0; i < 10001; i++) {
+      _userCache.set(`overflow-user-${i}`, { id: `overflow-user-${i}`, role: 'USER' });
+    }
+    expect(_userCache.size).toBeLessThanOrEqual(10000);
+  });
+
+  it('should not return an entry after its TTL has elapsed', async () => {
+    // Use a per-entry TTL override (50 ms) so we can test expiry without fake timers.
+    _userCache.set('ttl-user', { id: 'ttl-user', role: 'USER' }, { ttl: 50 });
+    expect(_userCache.get('ttl-user')).toBeDefined();
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(_userCache.get('ttl-user')).toBeUndefined();
   });
 });
 

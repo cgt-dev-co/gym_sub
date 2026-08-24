@@ -3,9 +3,12 @@ const { body } = require('express-validator');
 const {
   createPaymentIntent,
   handleWebhook,
-  getPaymentHistory
+  getPaymentHistory,
+  getPaymentSummary,
+  getPaymentReceipt,
+  getAdminPaymentAnalytics
 } = require('../controllers/payment.controller');
-const { authenticate } = require('../middleware/auth.middleware');
+const { authenticate, isAdmin } = require('../middleware/auth.middleware');
 const { validate } = require('../middleware/validation.middleware');
 
 const router = express.Router();
@@ -25,5 +28,8 @@ router.post(
 router.post('/webhook', handleWebhook);
 
 router.get('/history', authenticate, getPaymentHistory);
+router.get('/summary', authenticate, getPaymentSummary);
+router.get('/receipt/:id', authenticate, getPaymentReceipt);
+router.get('/admin/analytics', authenticate, isAdmin, getAdminPaymentAnalytics);
 
 module.exports = router;
