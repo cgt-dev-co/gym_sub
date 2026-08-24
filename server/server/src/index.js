@@ -143,9 +143,6 @@ const initializeServer = async () => {
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, cleaning up...');
   stopCronJobs();
-  if (process.cleanupInterval) {
-    clearInterval(process.cleanupInterval);
-  }
   if (process.cleanupTimeout) {
     clearTimeout(process.cleanupTimeout);
   }
@@ -155,9 +152,6 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('SIGINT received, cleaning up...');
   stopCronJobs();
-  if (process.cleanupInterval) {
-    clearInterval(process.cleanupInterval);
-  }
   if (process.cleanupTimeout) {
     clearTimeout(process.cleanupTimeout);
   }
