@@ -17,10 +17,10 @@ const prisma = require('../config/prisma');
 //   be made after a successful DB reservation, or the DB record should be created first with
 //   a PENDING placeholder.
 //
-// Bug 3 — Currency hardcoded to USD: the PaymentIntent is created with currency: 'usd' and
-//   the local payment record stores currency: 'USD' unconditionally. If the plan price is
-//   set in a different currency in the future, the Stripe charge and the DB record will be
-//   mismatched. Currency should come from the plan definition or a global config value.
+// Bug 3 — Currency fallback to USD: Currency is now plan-driven (line 35: `const currency = plan.currency || 'USD'`).
+//   However, if a plan is missing the currency field, the system silently defaults to USD. This may mismatch
+//   the intended currency for international plans. Consider: (a) enforcing a currency value on plan creation,
+//   or (b) setting a configurable global default instead of 'USD'.
 
 const createPaymentIntent = async (req, res, next) => {
   try {
