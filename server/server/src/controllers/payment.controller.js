@@ -73,6 +73,15 @@ const handleWebhook = async (req, res) => {
   }
 
   try {
+    const existingEvent = await prisma.processedEvent.findUnique({
+      where: { eventId: event.id }
+    });
+
+    if (existingEvent) {
+      console.log(`Event ${event.id} already processed, skipping`);
+      return res.json({ received: true });
+    }
+
     switch (event.type) {
       case 'payment_intent.succeeded':
         await handlePaymentSuccess(event.data.object);
@@ -83,6 +92,10 @@ const handleWebhook = async (req, res) => {
       default:
         console.log(`Unhandled event type: ${event.type}`);
     }
+
+    await prisma.processedEvent.create({
+      data: { eventId: event.id, eventType: event.type }
+    });
 
     res.json({ received: true });
   } catch (error) {
