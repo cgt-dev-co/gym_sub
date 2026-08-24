@@ -13,8 +13,6 @@ import Dashboard from './pages/Dashboard'
 import Plans from './pages/Plans'
 import MySubscription from './pages/MySubscription'
 import Profile from './pages/Profile'
-import Blog from './pages/Blog'
-import Services from './pages/Services'
 import Home from './pages/Home'
 import Admin from './pages/Admin'
 import Classes from './pages/Classes'
@@ -35,8 +33,6 @@ function App() {
             <Route path="plans" element={<Plans />} />
             <Route path="my-subscription" element={<MySubscription />} />
             <Route path="profile" element={<Profile />} />
-            <Route path="blog" element={<Blog />} />
-            <Route path="services" element={<Services />} />
             <Route path="classes" element={<Classes />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="progress" element={<Progress />} />

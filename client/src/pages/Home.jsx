@@ -141,9 +141,6 @@ function Home() {
                 <p className="text-gray-600 mb-4">
                   Access to premium cardio and strength training equipment
                 </p>
-                <Link to="/services" className="text-blue-600 font-semibold hover:text-blue-700">
-                  Learn More →
-                </Link>
               </div>
             </div>
 
@@ -158,9 +155,6 @@ function Home() {
                 <p className="text-gray-600 mb-4">
                   Join energizing group fitness classes for all levels
                 </p>
-                <Link to="/services" className="text-blue-600 font-semibold hover:text-blue-700">
-                  Learn More →
-                </Link>
               </div>
             </div>
 
@@ -175,9 +169,6 @@ function Home() {
                 <p className="text-gray-600 mb-4">
                   One-on-one coaching with certified personal trainers
                 </p>
-                <Link to="/services" className="text-blue-600 font-semibold hover:text-blue-700">
-                  Learn More →
-                </Link>
               </div>
             </div>
           </div>
@@ -214,8 +205,6 @@ function Home() {
               <h4 className="text-lg font-semibold mb-4">Quick Links</h4>
               <ul className="space-y-2 text-gray-400">
                 <li><Link to="/plans" className="hover:text-white">Plans</Link></li>
-                <li><Link to="/services" className="hover:text-white">Services</Link></li>
-                <li><Link to="/blog" className="hover:text-white">Blog</Link></li>
               </ul>
             </div>
             <div>

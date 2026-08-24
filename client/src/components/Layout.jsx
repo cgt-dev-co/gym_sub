@@ -37,8 +37,6 @@ const Layout = () => {
                 {navLink('/my-subscription', 'My Subscription')}
                 {navLink('/classes', 'Classes')}
                 {navLink('/progress', 'Progress')}
-                {navLink('/blog', 'Blog')}
-                {navLink('/services', 'Services')}
                 {user?.role === 'ADMIN' && navLink('/admin', 'Admin')}
               </div>
             </div>
