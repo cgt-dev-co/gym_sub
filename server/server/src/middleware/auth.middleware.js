@@ -35,6 +35,10 @@ const getUserWithCache = async (userId) => {
   return user;
 };
 
+const clearUserCache = (userId) => {
+  userCache.delete(userId);
+};
+
 const revokeToken = async (token) => {
   try {
     const decoded = jwt.decode(token);
@@ -56,20 +60,34 @@ const isTokenRevoked = async (token) => {
     });
     return !!revoked;
   } catch (error) {
+    // Log the error and let it propagate; the authenticate() middleware will catch it
+    // and return 500. Failing closed (returning true) would turn transient DB outages
+    // into denial-of-service for all authenticated users. Clients can distinguish:
+    // - 401: token is invalid/revoked
+    // - 500: service unavailable (DB error)
     console.error('Failed to check token revocation:', error);
-    // Fail securely: treat the token as revoked if the DB check errors
-    return true;
+    throw error;
   }
 };
 
-const cleanupExpiredTokens = async () => {
+const cleanupExpiredTokens = async (timeoutMs = 30000) => {
   try {
-    const result = await prisma.tokenBlacklist.deleteMany({
+    const cleanupPromise = prisma.tokenBlacklist.deleteMany({
       where: { expiresAt: { lt: new Date() } }
     });
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Token cleanup timed out')), timeoutMs)
+    );
+
+    const result = await Promise.race([cleanupPromise, timeoutPromise]);
     console.log(`Cleaned up ${result.count} expired blacklist entries`);
+    return { success: true, count: result.count };
   } catch (error) {
-    console.error('Failed to cleanup expired tokens:', error);
+    const isTimeout = error.message.includes('timed out');
+    const level = isTimeout ? 'warn' : 'error';
+    console[level](`Token cleanup failed (${isTimeout ? 'timeout' : 'error'}):`, error.message);
+    return { success: false, reason: isTimeout ? 'timeout' : 'error', error };
   }
 };
 
@@ -123,4 +141,4 @@ const isAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { authenticate, isAdmin, revokeToken, getUserWithCache, cleanupExpiredTokens };
+module.exports = { authenticate, isAdmin, revokeToken, isTokenRevoked, getUserWithCache, clearUserCache, cleanupExpiredTokens };

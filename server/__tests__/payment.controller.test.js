@@ -26,7 +26,7 @@ describe('createPaymentIntent', () => {
     const mockNext = jest.fn();
 
     prisma.plan.findUnique.mockResolvedValueOnce({
-      id: 'plan123', name: 'Premium', price: 99.99, isActive: true
+      id: 'plan123', name: 'Premium', price: 99.99, currency: 'USD', isActive: true
     });
 
     prisma.payment.create.mockResolvedValueOnce({ id: 'payment123', stripePaymentIntentId: null });
@@ -70,13 +70,71 @@ describe('createPaymentIntent', () => {
     });
   });
 
+  it('should use EUR currency from plan', async () => {
+    const mockReq = { body: { planId: 'plan_eur' }, user: { id: 'user456' } };
+    const mockRes = { json: jest.fn().mockReturnThis(), status: jest.fn().mockReturnThis() };
+    const mockNext = jest.fn();
+
+    prisma.plan.findUnique.mockResolvedValueOnce({
+      id: 'plan_eur', name: 'Premium EUR', price: 79.99, currency: 'EUR', isActive: true
+    });
+
+    prisma.payment.create.mockResolvedValueOnce({ id: 'payment456', stripePaymentIntentId: null });
+    mockPaymentIntentsCreate.mockResolvedValueOnce({ id: 'pi_456', client_secret: 'pi_456_secret' });
+    prisma.payment.update.mockResolvedValueOnce({ id: 'payment456', stripePaymentIntentId: 'pi_456' });
+
+    await createPaymentIntent(mockReq, mockRes, mockNext);
+
+    expect(prisma.payment.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'user456',
+        amount: 79.99,
+        currency: 'EUR',
+        status: 'PENDING',
+        stripePaymentIntentId: null,
+        paymentMethod: 'card'
+      }
+    });
+
+    expect(mockPaymentIntentsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 7999,
+        currency: 'eur',
+        metadata: expect.objectContaining({ paymentId: 'payment456' })
+      })
+    );
+  });
+
+  it('should fall back to USD when plan has no currency field', async () => {
+    const mockReq = { body: { planId: 'plan_legacy' }, user: { id: 'user789' } };
+    const mockRes = { json: jest.fn().mockReturnThis(), status: jest.fn().mockReturnThis() };
+    const mockNext = jest.fn();
+
+    prisma.plan.findUnique.mockResolvedValueOnce({
+      id: 'plan_legacy', name: 'Legacy', price: 49.99, currency: null, isActive: true
+    });
+
+    prisma.payment.create.mockResolvedValueOnce({ id: 'payment789' });
+    mockPaymentIntentsCreate.mockResolvedValueOnce({ id: 'pi_789', client_secret: 'pi_789_secret' });
+    prisma.payment.update.mockResolvedValueOnce({ id: 'payment789', stripePaymentIntentId: 'pi_789' });
+
+    await createPaymentIntent(mockReq, mockRes, mockNext);
+
+    expect(prisma.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ currency: 'USD' }) })
+    );
+    expect(mockPaymentIntentsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ currency: 'usd' })
+    );
+  });
+
   it('should fail safely if Stripe call fails after DB write', async () => {
     const mockReq = { body: { planId: 'plan123' }, user: { id: 'user123' } };
     const mockRes = { json: jest.fn(), status: jest.fn().mockReturnThis() };
     const mockNext = jest.fn();
 
     prisma.plan.findUnique.mockResolvedValueOnce({
-      id: 'plan123', name: 'Premium', price: 99.99, isActive: true
+      id: 'plan123', name: 'Premium', price: 99.99, currency: 'USD', isActive: true
     });
 
     prisma.payment.create.mockResolvedValueOnce({ id: 'payment123' });

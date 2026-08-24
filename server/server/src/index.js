@@ -86,16 +86,44 @@ const initializeServer = async () => {
       console.log(`Environment: ${process.env.NODE_ENV}`);
     });
 
-    const cleanupInterval = setInterval(async () => {
-      try {
-        await cleanupExpiredTokens();
-      } catch (error) {
-        console.error('Unhandled error in token cleanup interval:', error);
-      }
-    }, 60 * 60 * 1000);
+    // Token cleanup with exponential backoff on failure
+    let cleanupFailureCount = 0;
+    const MAX_BACKOFF_HOURS = 24;
+    const INITIAL_INTERVAL_HOURS = 1;
 
-    // Store interval ID for graceful shutdown
-    process.cleanupInterval = cleanupInterval;
+    const scheduleCleanup = () => {
+      const baseIntervalMs = INITIAL_INTERVAL_HOURS * 60 * 60 * 1000;
+      const backoffMultiplier = Math.min(
+        Math.pow(2, cleanupFailureCount),
+        Math.pow(2, Math.log2(MAX_BACKOFF_HOURS))
+      );
+      const intervalMs = baseIntervalMs * backoffMultiplier;
+
+      const cleanupTimeout = setTimeout(async () => {
+        try {
+          const result = await cleanupExpiredTokens(30000);
+
+          if (result.success) {
+            cleanupFailureCount = 0;
+            console.log('Token cleanup completed successfully');
+          } else {
+            cleanupFailureCount++;
+            console.warn(
+              `Token cleanup failed (attempt ${cleanupFailureCount}). Next retry in ${Math.round(intervalMs / 60000)}m.`
+            );
+          }
+        } catch (error) {
+          cleanupFailureCount++;
+          console.error('Unhandled error in token cleanup:', error);
+        }
+
+        scheduleCleanup();
+      }, intervalMs);
+
+      process.cleanupTimeout = cleanupTimeout;
+    };
+
+    scheduleCleanup();
   } catch (error) {
     console.error('Failed to initialize server:', error);
     process.exit(1);
@@ -108,6 +136,9 @@ process.on('SIGTERM', () => {
   if (process.cleanupInterval) {
     clearInterval(process.cleanupInterval);
   }
+  if (process.cleanupTimeout) {
+    clearTimeout(process.cleanupTimeout);
+  }
   process.exit(0);
 });
 
@@ -115,6 +146,9 @@ process.on('SIGINT', () => {
   console.log('SIGINT received, cleaning up...');
   if (process.cleanupInterval) {
     clearInterval(process.cleanupInterval);
+  }
+  if (process.cleanupTimeout) {
+    clearTimeout(process.cleanupTimeout);
   }
   process.exit(0);
 });

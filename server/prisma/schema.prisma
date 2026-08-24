@@ -27,6 +27,7 @@ model Plan {
   name      String
   duration  Duration
   price     Float
+  currency  String   @default("USD")
   features  Json
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())

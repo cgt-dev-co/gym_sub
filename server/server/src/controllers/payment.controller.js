@@ -32,11 +32,13 @@ const createPaymentIntent = async (req, res, next) => {
       return res.status(404).json({ error: 'Plan not found or inactive' });
     }
 
+    const currency = plan.currency || 'USD';
+
     const payment = await prisma.payment.create({
       data: {
         userId: req.user.id,
         amount: plan.price,
-        currency: 'USD',
+        currency: currency,
         status: 'PENDING',
         stripePaymentIntentId: null,
         paymentMethod: 'card'
@@ -45,7 +47,7 @@ const createPaymentIntent = async (req, res, next) => {
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(plan.price * 100),
-      currency: 'usd',
+      currency: currency.toLowerCase(),
       metadata: { userId: req.user.id, planId: plan.id, planName: plan.name, paymentId: payment.id }
     });
 

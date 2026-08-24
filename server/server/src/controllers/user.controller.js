@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const prisma = require('../config/prisma');
+const { clearUserCache } = require('../middleware/auth.middleware');
 
 const getProfile = async (req, res, next) => {
   try {
@@ -84,6 +85,7 @@ const updateProfile = async (req, res, next) => {
     if (address) data.address = address;
 
     const updated = await prisma.user.update({ where: { id: user.id }, data });
+    clearUserCache(user.id);
 
     res.json({
       message: 'Profile updated successfully',
