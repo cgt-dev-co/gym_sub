@@ -2,6 +2,11 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../config/prisma');
 const { clearUserCache, revokeToken } = require('../middleware/auth.middleware');
 
+// NOTE: Every user update (profile, password, role, etc.) must invalidate the
+// cache by calling clearUserCache(userId). This ensures the authenticate()
+// middleware fetches fresh user data on the next request. See auth.middleware.js
+// for the full cache invalidation contract.
+
 const getProfile = async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });

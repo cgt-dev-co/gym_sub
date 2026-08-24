@@ -20,8 +20,11 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  subscriptions Subscription[]
-  payments      Payment[]
+  subscriptions  Subscription[]
+  payments       Payment[]
+  classBookings  ClassBooking[]
+  notifications  Notification[]
+  workoutLogs    WorkoutLog[]
 }
 
 model Plan {
@@ -79,6 +82,66 @@ model TokenBlacklist {
   @@index([revokedAt])
 }
 
+model GymClass {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  instructor  String
+  capacity    Int       @default(20)
+  classType   String
+  schedule    DateTime
+  duration    Int       @default(60)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  bookings ClassBooking[]
+}
+
+model ClassBooking {
+  id        String              @id @default(cuid())
+  userId    String
+  classId   String
+  status    ClassBookingStatus  @default(CONFIRMED)
+  bookedAt  DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id])
+  gymClass  GymClass  @relation(fields: [classId], references: [id])
+
+  @@unique([userId, classId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+}
+
+model WorkoutLog {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  exercises Json
+  notes     String?
+  duration  Int
+  logDate   DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, logDate])
+}
+
 enum Role {
   USER
   ADMIN
@@ -102,4 +165,18 @@ enum PaymentStatus {
   COMPLETED
   FAILED
   REFUNDED
+}
+
+enum ClassBookingStatus {
+  CONFIRMED
+  CANCELLED
+  ATTENDED
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  SUCCESS
+  PAYMENT
+  SUBSCRIPTION
 }

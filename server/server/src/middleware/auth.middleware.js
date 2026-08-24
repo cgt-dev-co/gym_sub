@@ -18,6 +18,27 @@ const prisma = require('../config/prisma');
 //   than a graceful degradation. The failure policy should be reviewed for the specific threat
 //   model of this application.
 
+// Cache Invalidation Contract:
+// ────────────────────────────────────────────────────────────────────────────
+// getUserWithCache() maintains an in-memory cache with a 5-minute TTL to
+// reduce database queries. However, this introduces a risk: if a user record
+// is modified (e.g., role downgraded), the cache is stale until natural
+// expiration.
+//
+// ANY endpoint or service that modifies a user record MUST call
+// clearUserCache(userId) immediately after the update to invalidate the
+// cache entry. This ensures that subsequent authenticate() calls fetch
+// the fresh user data from the database.
+//
+// Failure to invalidate the cache can allow a demoted user to retain their
+// old privileges (e.g., ADMIN role) for up to 5 minutes.
+//
+// Common update patterns:
+// - After prisma.user.update({ where: { id }, data: {...} }), call clearUserCache(id)
+// - After any role/permission change, call clearUserCache(id)
+// - After email/password updates, consider revoking active tokens as well
+// ────────────────────────────────────────────────────────────────────────────
+
 // In-memory cache for user data (TTL: 5 minutes)
 const userCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;

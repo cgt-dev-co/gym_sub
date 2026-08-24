@@ -62,4 +62,39 @@ export const paymentService = {
   getHistory: () => api.get('/payments/history')
 }
 
+export const adminService = {
+  getStats: () => api.get('/admin/stats'),
+  getUsers: (params) => api.get('/admin/users', { params }),
+  updateUserRole: (id, role) => api.put(`/admin/users/${id}/role`, { role }),
+  deleteUser: (id) => api.delete(`/admin/users/${id}`),
+  getAllSubscriptions: (params) => api.get('/admin/subscriptions', { params })
+}
+
+export const classService = {
+  getAll: (params) => api.get('/classes', { params }),
+  getMyBookings: () => api.get('/classes/my-bookings'),
+  book: (classId) => api.post('/classes/book', { classId }),
+  cancelBooking: (classId) => api.delete(`/classes/cancel/${classId}`),
+  create: (data) => api.post('/classes', data),
+  update: (id, data) => api.put(`/classes/${id}`, data),
+  deactivate: (id) => api.delete(`/classes/${id}`)
+}
+
+export const notificationService = {
+  getAll: (params) => api.get('/notifications', { params }),
+  getUnreadCount: () => api.get('/notifications/unread-count'),
+  markRead: (id) => api.put(`/notifications/${id}/read`),
+  markAllRead: () => api.put('/notifications/read-all'),
+  delete: (id) => api.delete(`/notifications/${id}`),
+  broadcast: (data) => api.post('/notifications/broadcast', data)
+}
+
+export const progressService = {
+  getLogs: (params) => api.get('/progress', { params }),
+  getStats: () => api.get('/progress/stats'),
+  createLog: (data) => api.post('/progress', data),
+  updateLog: (id, data) => api.put(`/progress/${id}`, data),
+  deleteLog: (id) => api.delete(`/progress/${id}`)
+}
+
 export default api

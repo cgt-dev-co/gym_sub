@@ -52,6 +52,27 @@ describe('getUserWithCache and clearUserCache', () => {
   it('should be a no-op when clearing a userId that is not cached', () => {
     expect(() => clearUserCache('unknown-user')).not.toThrow();
   });
+
+  it('should return fresh user data after cache invalidation when role is downgraded', async () => {
+    const adminUser = { id: 'user-1', name: 'Bob', role: 'ADMIN', email: 'bob@example.com' };
+    const demotedUser = { id: 'user-1', name: 'Bob', role: 'USER', email: 'bob@example.com' };
+
+    prisma.user.findUnique
+      .mockResolvedValueOnce(adminUser)   // First call: cached ADMIN
+      .mockResolvedValueOnce(demotedUser); // After clear: fresh USER
+
+    // Simulate initial authentication with ADMIN role
+    const cachedResult = await getUserWithCache('user-1');
+    expect(cachedResult.role).toBe('ADMIN');
+
+    // Simulate admin downgrading the user's role in the database
+    clearUserCache('user-1');
+
+    // Next call should fetch fresh data from DB (USER role)
+    const freshResult = await getUserWithCache('user-1');
+    expect(freshResult.role).toBe('USER');
+    expect(prisma.user.findUnique).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('isTokenRevoked', () => {

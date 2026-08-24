@@ -12,6 +12,10 @@ const userRoutes = require('./routes/user.routes');
 const planRoutes = require('./routes/plan.routes');
 const subscriptionRoutes = require('./routes/subscription.routes');
 const paymentRoutes = require('./routes/payment.routes');
+const adminRoutes = require('./routes/admin.routes');
+const classRoutes = require('./routes/class.routes');
+const notificationRoutes = require('./routes/notification.routes');
+const progressRoutes = require('./routes/progress.routes');
 
 const { errorHandler } = require('./middleware/error.middleware');
 const { cleanupExpiredTokens } = require('./middleware/auth.middleware');
@@ -41,6 +45,10 @@ app.use('/api/users', userRoutes);
 app.use('/api/plans', planRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/classes', classRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/progress', progressRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
