@@ -140,20 +140,32 @@ const initializeServer = async () => {
 };
 
 // Graceful shutdown handlers
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('SIGTERM received, cleaning up...');
   stopCronJobs();
   if (process.cleanupTimeout) {
     clearTimeout(process.cleanupTimeout);
   }
+  try {
+    await prisma.$disconnect();
+    console.log('Prisma disconnected successfully');
+  } catch (error) {
+    console.error('Error disconnecting Prisma:', error);
+  }
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('SIGINT received, cleaning up...');
   stopCronJobs();
   if (process.cleanupTimeout) {
     clearTimeout(process.cleanupTimeout);
+  }
+  try {
+    await prisma.$disconnect();
+    console.log('Prisma disconnected successfully');
+  } catch (error) {
+    console.error('Error disconnecting Prisma:', error);
   }
   process.exit(0);
 });
