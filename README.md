@@ -1,5 +1,7 @@
 # Gym Subscription Management System
 
+codegaragetech
+
 A full-stack gym subscription management system with user authentication, subscription plans, and payment processing. Built for small to medium gyms that need a self-hosted solution to manage member signups, recurring billing, and subscription lifecycles without relying on third-party membership platforms.
 
 ## Tech Stack
