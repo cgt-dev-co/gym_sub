@@ -105,18 +105,28 @@ const handleWebhook = async (req, res) => {
 };
 
 const handlePaymentSuccess = async (paymentIntent) => {
-  await prisma.payment.updateMany({
+  const result = await prisma.payment.updateMany({
     where: { stripePaymentIntentId: paymentIntent.id },
     data: { status: 'COMPLETED' }
   });
+
+  if (result.count === 0) {
+    throw new Error(`No payment found with stripePaymentIntentId ${paymentIntent.id}`);
+  }
+
   console.log(`Payment ${paymentIntent.id} completed for user ${paymentIntent.metadata.userId}`);
 };
 
 const handlePaymentFailed = async (paymentIntent) => {
-  await prisma.payment.updateMany({
+  const result = await prisma.payment.updateMany({
     where: { stripePaymentIntentId: paymentIntent.id },
     data: { status: 'FAILED' }
   });
+
+  if (result.count === 0) {
+    throw new Error(`No payment found with stripePaymentIntentId ${paymentIntent.id}`);
+  }
+
   console.log(`Payment ${paymentIntent.id} failed`);
 };
 
@@ -288,4 +298,4 @@ const getAdminPaymentAnalytics = async (req, res, next) => {
   }
 };
 
-module.exports = { createPaymentIntent, handleWebhook, getPaymentHistory, getPaymentSummary, getPaymentReceipt, getAdminPaymentAnalytics };
+module.exports = { createPaymentIntent, handleWebhook, handlePaymentSuccess, handlePaymentFailed, getPaymentHistory, getPaymentSummary, getPaymentReceipt, getAdminPaymentAnalytics };

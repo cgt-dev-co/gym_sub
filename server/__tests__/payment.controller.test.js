@@ -10,7 +10,7 @@ jest.mock('stripe', () => {
   return mockStripe;
 });
 
-const { createPaymentIntent } = require('../server/src/controllers/payment.controller');
+const { createPaymentIntent, handlePaymentSuccess, handlePaymentFailed } = require('../server/src/controllers/payment.controller');
 const prisma = require('../server/src/config/prisma');
 const Stripe = require('stripe');
 const mockPaymentIntentsCreate = Stripe.__mockCreate;
@@ -144,5 +144,71 @@ describe('createPaymentIntent', () => {
 
     expect(prisma.payment.create).toHaveBeenCalled();
     expect(mockNext).toHaveBeenCalledWith(expect.any(Error));
+  });
+});
+
+describe('handlePaymentSuccess', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should throw an error if no payment record matches the stripePaymentIntentId', async () => {
+    prisma.payment = { updateMany: jest.fn().mockResolvedValueOnce({ count: 0 }) };
+
+    const paymentIntent = { id: 'pi_orphaned', metadata: { userId: 'user123' } };
+
+    await expect(handlePaymentSuccess(paymentIntent)).rejects.toThrow(
+      `No payment found with stripePaymentIntentId pi_orphaned`
+    );
+  });
+
+  it('should succeed if updateMany returns count > 0', async () => {
+    prisma.payment = { updateMany: jest.fn().mockResolvedValueOnce({ count: 1 }) };
+
+    const paymentIntent = { id: 'pi_valid', metadata: { userId: 'user123' } };
+    const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+    await handlePaymentSuccess(paymentIntent);
+
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith({
+      where: { stripePaymentIntentId: 'pi_valid' },
+      data: { status: 'COMPLETED' }
+    });
+
+    expect(consoleSpy).toHaveBeenCalledWith('Payment pi_valid completed for user user123');
+    consoleSpy.mockRestore();
+  });
+});
+
+describe('handlePaymentFailed', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should throw an error if no payment record matches the stripePaymentIntentId', async () => {
+    prisma.payment = { updateMany: jest.fn().mockResolvedValueOnce({ count: 0 }) };
+
+    const paymentIntent = { id: 'pi_orphaned', metadata: { userId: 'user123' } };
+
+    await expect(handlePaymentFailed(paymentIntent)).rejects.toThrow(
+      `No payment found with stripePaymentIntentId pi_orphaned`
+    );
+  });
+
+  it('should succeed if updateMany returns count > 0', async () => {
+    prisma.payment = { updateMany: jest.fn().mockResolvedValueOnce({ count: 1 }) };
+
+    const paymentIntent = { id: 'pi_valid', metadata: { userId: 'user123' } };
+    const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+    await handlePaymentFailed(paymentIntent);
+
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith({
+      where: { stripePaymentIntentId: 'pi_valid' },
+      data: { status: 'FAILED' }
+    });
+
+    expect(consoleSpy).toHaveBeenCalledWith('Payment pi_valid failed');
+    consoleSpy.mockRestore();
   });
 });
