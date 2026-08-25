@@ -4,11 +4,11 @@ import { useAuth } from '../context/AuthContext'
 import { toast } from 'react-toastify'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { useNavigate } from 'react-router-dom'
+import { useFetch } from '../hooks/useFetch'
 
 const Profile = () => {
   const { loadUser, user } = useAuth()
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [activity, setActivity] = useState(null)
   const [activeTab, setActiveTab] = useState('profile')
@@ -24,37 +24,33 @@ const Profile = () => {
   const [showDeleteSection, setShowDeleteSection] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  useEffect(() => {
-    loadProfile()
-    loadActivity()
-  }, [])
+  const { data: profileData, loading, refetch: refetchProfile } = useFetch(
+    () => userService.getProfile(),
+    true
+  )
+  const { data: activityData } = useFetch(
+    () => userService.getActivity(),
+    true
+  )
 
-  const loadProfile = async () => {
-    try {
-      const response = await userService.getProfile()
+  useEffect(() => {
+    if (profileData) {
       setFormData({
-        name: response.user.name || '',
-        phone: response.user.phone || '',
-        address: response.user.address || '',
-        avatarUrl: response.user.avatarUrl || '',
+        name: profileData.user.name || '',
+        phone: profileData.user.phone || '',
+        address: profileData.user.address || '',
+        avatarUrl: profileData.user.avatarUrl || '',
         currentPassword: '',
         newPassword: ''
       })
-    } catch {
-      toast.error('Failed to load profile')
-    } finally {
-      setLoading(false)
     }
-  }
+  }, [profileData])
 
-  const loadActivity = async () => {
-    try {
-      const res = await userService.getActivity()
-      setActivity(res.activity)
-    } catch {
-      // non-critical
+  useEffect(() => {
+    if (activityData) {
+      setActivity(activityData.activity)
     }
-  }
+  }, [activityData])
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -89,6 +85,7 @@ const Profile = () => {
       toast.success('Profile updated successfully')
       setFormData({ ...formData, currentPassword: '', newPassword: '' })
       await loadUser()
+      await refetchProfile()
     } catch (error) {
       toast.error(error.error || 'Failed to update profile')
     } finally {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { progressService } from '../services/api'
 import { toast } from 'react-toastify'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { useMultiFetch } from '../hooks/useFetch'
 
 const defaultExercise = () => ({ name: '', sets: '', reps: '', weight: '', weightUnit: 'kg' })
 
@@ -48,7 +49,6 @@ const Progress = () => {
   const [streak, setStreak] = useState(null)
   const [goals, setGoals] = useState([])
   const [personalRecords, setPersonalRecords] = useState({})
-  const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('log')
   const [showForm, setShowForm] = useState(false)
   const [showGoalForm, setShowGoalForm] = useState(false)
@@ -65,30 +65,21 @@ const Progress = () => {
   const [updateGoalId, setUpdateGoalId] = useState(null)
   const [newProgressValue, setNewProgressValue] = useState('')
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  const { results, loading, refetch: refetchProgress } = useMultiFetch([
+    { name: 'logs', fn: () => progressService.getLogs() },
+    { name: 'stats', fn: () => progressService.getStats() },
+    { name: 'streak', fn: () => progressService.getStreak() },
+    { name: 'goals', fn: () => progressService.getGoals() },
+    { name: 'personalRecords', fn: () => progressService.getPersonalRecords() }
+  ])
 
-  const loadData = async () => {
-    try {
-      const [logRes, statsRes, streakRes, goalRes, prRes] = await Promise.all([
-        progressService.getLogs(),
-        progressService.getStats(),
-        progressService.getStreak(),
-        progressService.getGoals(),
-        progressService.getPersonalRecords()
-      ])
-      setLogs(logRes.logs)
-      setStats(statsRes.stats)
-      setStreak(streakRes)
-      setGoals(goalRes.goals)
-      setPersonalRecords(prRes.personalRecords)
-    } catch {
-      toast.error('Failed to load progress data')
-    } finally {
-      setLoading(false)
-    }
-  }
+  useEffect(() => {
+    if (results.logs?.data) setLogs(results.logs.data.logs)
+    if (results.stats?.data) setStats(results.stats.data.stats)
+    if (results.streak?.data) setStreak(results.streak.data)
+    if (results.goals?.data) setGoals(results.goals.data.goals)
+    if (results.personalRecords?.data) setPersonalRecords(results.personalRecords.data.personalRecords)
+  }, [results])
 
   const resetForm = () => {
     setForm({ title: '', exercises: [defaultExercise()], notes: '', duration: '', logDate: new Date().toISOString().slice(0, 10) })
@@ -122,7 +113,7 @@ const Progress = () => {
         toast.success('Workout logged!')
       }
       resetForm()
-      loadData()
+      refetchProgress()
     } catch {
       toast.error('Failed to save workout')
     } finally {
@@ -146,7 +137,7 @@ const Progress = () => {
       await progressService.createGoal(data)
       toast.success('Goal created!')
       setShowGoalForm(false)
-      loadData()
+      refetchProgress()
     } catch {
       toast.error('Failed to create goal')
     }
@@ -160,7 +151,7 @@ const Progress = () => {
       toast.success('Progress updated!')
       setUpdateGoalId(null)
       setNewProgressValue('')
-      loadData()
+      refetchProgress()
     } catch {
       toast.error('Failed to update goal')
     }

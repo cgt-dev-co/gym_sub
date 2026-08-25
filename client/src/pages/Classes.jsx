@@ -3,6 +3,7 @@ import { classService } from '../services/api'
 import { toast } from 'react-toastify'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { useAuth } from '../context/AuthContext'
+import { useFetch } from '../hooks/useFetch'
 
 const StarRating = ({ value, interactive = false, onChange }) => {
   const [hover, setHover] = useState(0)
@@ -159,7 +160,6 @@ const Classes = () => {
   const { user } = useAuth()
   const [classes, setClasses] = useState([])
   const [myBookings, setMyBookings] = useState([])
-  const [loading, setLoading] = useState(true)
   const [view, setView] = useState('upcoming')
   const [filterType, setFilterType] = useState('')
   const [searchQ, setSearchQ] = useState('')
@@ -173,45 +173,44 @@ const Classes = () => {
 
   const classTypes = ['Yoga', 'HIIT', 'Pilates', 'Spinning', 'Zumba', 'Boxing', 'CrossFit', 'Swimming']
 
-  useEffect(() => {
-    loadClasses()
-  }, [view, filterType])
-
-  const loadClasses = async () => {
-    setLoading(true)
-    try {
+  const { data: fetchedData, loading, refetch: refetchClasses } = useFetch(
+    async () => {
       const params = view === 'upcoming' ? { upcoming: 'true' } : {}
       if (filterType) params.classType = filterType
       const [classRes, bookingRes] = await Promise.all([
         classService.getAll(params),
         classService.getMyBookings()
       ])
+      return { classRes, bookingRes }
+    },
+    false
+  )
 
+  useEffect(() => {
+    refetchClasses()
+  }, [view, filterType]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (fetchedData) {
       const bookingMap = {}
-      for (const b of bookingRes.bookings) {
+      for (const b of fetchedData.bookingRes.bookings) {
         bookingMap[b.classId] = b.status
       }
-
-      const enriched = classRes.classes.map(c => ({
+      const enriched = fetchedData.classRes.classes.map(c => ({
         ...c,
         isBooked: bookingMap[c.id] === 'CONFIRMED',
         myStatus: bookingMap[c.id] || null
       }))
-
       setClasses(enriched)
-      setMyBookings(bookingRes.bookings)
-    } catch {
-      toast.error('Failed to load classes')
-    } finally {
-      setLoading(false)
+      setMyBookings(fetchedData.bookingRes.bookings)
     }
-  }
+  }, [fetchedData])
 
   const handleBook = async (classId) => {
     try {
       await classService.book(classId)
       toast.success('Class booked!')
-      loadClasses()
+      refetchClasses()
     } catch (err) {
       toast.error(err.error || 'Failed to book class')
     }
@@ -221,7 +220,7 @@ const Classes = () => {
     try {
       await classService.cancelBooking(classId)
       toast.success('Booking cancelled')
-      loadClasses()
+      refetchClasses()
     } catch {
       toast.error('Failed to cancel booking')
     }
@@ -231,7 +230,7 @@ const Classes = () => {
     try {
       const res = await classService.joinWaitlist(classId)
       toast.success(`Added to waitlist at position #${res.position}`)
-      loadClasses()
+      refetchClasses()
     } catch (err) {
       toast.error(err.error || 'Failed to join waitlist')
     }
@@ -241,7 +240,7 @@ const Classes = () => {
     try {
       await classService.leaveWaitlist(classId)
       toast.success('Removed from waitlist')
-      loadClasses()
+      refetchClasses()
     } catch {
       toast.error('Failed to leave waitlist')
     }
@@ -265,7 +264,7 @@ const Classes = () => {
       toast.success('Class created')
       setShowAddForm(false)
       setNewClass({ name: '', description: '', instructor: '', capacity: 20, classType: 'Yoga', schedule: '', duration: 60 })
-      loadClasses()
+      refetchClasses()
     } catch {
       toast.error('Failed to create class')
     } finally {

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { subscriptionService, classService, progressService, notificationService } from '../services/api'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { useMultiFetch } from '../hooks/useFetch'
 
 const TIPS = [
   'Consistency beats perfection. Showing up every day matters more than any single workout.',
@@ -48,45 +49,24 @@ const GoalProgressBar = ({ goal }) => {
 
 const Dashboard = () => {
   const { user } = useAuth()
-  const [subscription, setSubscription] = useState(null)
-  const [subscriptionHealth, setSubscriptionHealth] = useState(null)
-  const [upcomingClasses, setUpcomingClasses] = useState([])
-  const [progressStats, setProgressStats] = useState(null)
-  const [streak, setStreak] = useState(null)
-  const [goals, setGoals] = useState([])
-  const [unreadCount, setUnreadCount] = useState(0)
-  const [loading, setLoading] = useState(true)
   const [tip] = useState(() => TIPS[Math.floor(Math.random() * TIPS.length)])
+  const { results, loading } = useMultiFetch([
+    { name: 'subscription', fn: () => subscriptionService.getMy() },
+    { name: 'subscriptionHealth', fn: () => subscriptionService.getHealth() },
+    { name: 'classes', fn: () => classService.getAll({ upcoming: 'true' }) },
+    { name: 'stats', fn: () => progressService.getStats() },
+    { name: 'streak', fn: () => progressService.getStreak() },
+    { name: 'goals', fn: () => progressService.getGoals() },
+    { name: 'notifications', fn: () => notificationService.getUnreadCount() }
+  ])
 
-  useEffect(() => {
-    loadAll()
-  }, [])
-
-  const loadAll = async () => {
-    try {
-      const results = await Promise.allSettled([
-        subscriptionService.getMy(),
-        subscriptionService.getHealth(),
-        classService.getAll({ upcoming: 'true' }),
-        progressService.getStats(),
-        progressService.getStreak(),
-        progressService.getGoals(),
-        notificationService.getUnreadCount()
-      ])
-
-      if (results[0].status === 'fulfilled') setSubscription(results[0].value.subscription)
-      if (results[1].status === 'fulfilled') setSubscriptionHealth(results[1].value.health)
-      if (results[2].status === 'fulfilled') setUpcomingClasses(results[2].value.classes.slice(0, 3))
-      if (results[3].status === 'fulfilled') setProgressStats(results[3].value.stats)
-      if (results[4].status === 'fulfilled') setStreak(results[4].value)
-      if (results[5].status === 'fulfilled') setGoals(results[5].value.goals.filter(g => g.status === 'ACTIVE').slice(0, 3))
-      if (results[6].status === 'fulfilled') setUnreadCount(results[6].value.unreadCount)
-    } catch {
-      // errors handled per-item
-    } finally {
-      setLoading(false)
-    }
-  }
+  const subscription = results.subscription?.data?.subscription || null
+  const subscriptionHealth = results.subscriptionHealth?.data?.health || null
+  const upcomingClasses = results.classes?.data?.classes?.slice(0, 3) || []
+  const progressStats = results.stats?.data?.stats || null
+  const streak = results.streak?.data || null
+  const goals = results.goals?.data?.goals?.filter(g => g.status === 'ACTIVE').slice(0, 3) || []
+  const unreadCount = results.notifications?.data?.unreadCount || 0
 
   const getDaysRemaining = (endDate) => {
     const diff = Math.ceil((new Date(endDate) - new Date()) / (1000 * 60 * 60 * 24))

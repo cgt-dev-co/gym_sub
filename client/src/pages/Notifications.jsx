@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { notificationService } from '../services/api'
 import { toast } from 'react-toastify'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { useFetch } from '../hooks/useFetch'
 
 const typeStyles = {
   INFO: 'bg-blue-50 border-blue-200',
@@ -21,24 +22,19 @@ const typeIcons = {
 
 const Notifications = () => {
   const [notifications, setNotifications] = useState([])
-  const [loading, setLoading] = useState(true)
   const [unreadCount, setUnreadCount] = useState(0)
 
-  useEffect(() => {
-    loadNotifications()
-  }, [])
+  const { data: fetchedNotifications, loading } = useFetch(
+    () => notificationService.getAll(),
+    true
+  )
 
-  const loadNotifications = async () => {
-    try {
-      const res = await notificationService.getAll()
-      setNotifications(res.notifications)
-      setUnreadCount(res.unreadCount)
-    } catch {
-      toast.error('Failed to load notifications')
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    if (fetchedNotifications) {
+      setNotifications(fetchedNotifications.notifications)
+      setUnreadCount(fetchedNotifications.unreadCount)
     }
-  }
+  }, [fetchedNotifications])
 
   const handleMarkRead = async (id) => {
     try {
