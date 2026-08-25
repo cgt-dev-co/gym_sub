@@ -12,7 +12,7 @@ A full-stack gym subscription management system with user authentication, subscr
 
 ## Features
 
-- **User authentication and authorization** — cookie-based JWT auth with httpOnly flags, token blacklisting on logout, and an in-memory user cache to reduce DB round-trips on every request
+- **User authentication and authorization** — cookie-based JWT auth with httpOnly flags, token blacklisting on logout, and an in-memory user cache (LRU, 5-minute TTL) that stores user records for quick access; on every request, cached role and suspension status are validated against the live database to detect privilege changes immediately
 - **Subscription plan management** — admin-controlled plans with MONTHLY, QUARTERLY, and YEARLY durations; plans can be activated or deactivated without deleting historical data
 - **Payment processing with Stripe** — client-side Stripe Elements collects card details; the server creates a PaymentIntent and confirms subscription activation only after the webhook confirms payment success
 - **User dashboard** — members can view their active plan, upcoming renewal date, and full payment history in one place
