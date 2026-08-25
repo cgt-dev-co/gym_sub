@@ -2,29 +2,48 @@ import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
-const api = axios.create({
-  baseURL: API_URL,
-  withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json'
-  }
-})
+/**
+ * Factory function to create an axios client with domain-specific configuration.
+ * @param {string} baseURL - The base URL for this client
+ * @param {Object} options - Additional axios config options
+ * @returns {AxiosInstance} Configured axios instance
+ */
+const createApiClient = (baseURL, options = {}) => {
+  const client = axios.create({
+    baseURL,
+    withCredentials: true,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    ...options
+  })
 
-api.interceptors.request.use(
-  (config) => config,
-  (error) => Promise.reject(error)
-)
+  // Request interceptor (domain-agnostic)
+  client.interceptors.request.use(
+    (config) => config,
+    (error) => Promise.reject(error)
+  )
 
-api.interceptors.response.use(
-  (response) => response.data,
-  (error) => {
-    if (error.response?.status === 401) {
-      window.location.href = '/login'
+  // Response interceptor with 401 handling
+  client.interceptors.response.use(
+    (response) => response.data,
+    (error) => {
+      // Only redirect to login on 401 if this is the main API client
+      // (not admin-specific or other domain-specific clients)
+      if (error.response?.status === 401 && baseURL === API_URL) {
+        window.location.href = '/login'
+      }
+      return Promise.reject(error.response?.data || error)
     }
-    return Promise.reject(error.response?.data || error)
-  }
-)
+  )
 
+  return client
+}
+
+// Main API client (default for all services)
+const api = createApiClient(API_URL)
+
+// Export service objects using the main client
 export const authService = {
   register: (userData) => api.post('/auth/register', userData),
   login: (email, password) => api.post('/auth/login', { email, password }),
@@ -127,4 +146,6 @@ export const progressService = {
   deleteGoal: (id) => api.delete(`/progress/goals/${id}`)
 }
 
+// Export the factory and main client for advanced use cases
+export { createApiClient }
 export default api
