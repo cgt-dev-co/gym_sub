@@ -2,12 +2,10 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const prisma = require('../config/prisma');
 
 // KNOWN BUGS
-// Bug 1 — Webhook is not idempotent: Stripe can deliver the same event more than once.
-//   handlePaymentSuccess() uses updateMany() with no guard, so a duplicate
-//   payment_intent.succeeded delivery will run the update again without error. While this
-//   particular update is safe to repeat, any future logic added here (e.g. sending an email,
-//   crediting a referral) could fire twice. The handler should record processed event IDs and
-//   skip duplicates.
+// Bug 1 — FIXED: Webhook idempotency race condition resolved. handleWebhook() now attempts
+//   an atomic ProcessedEvent.create() before processing. If the eventId already exists
+//   (unique constraint violation P2002), the event is skipped. This prevents duplicate
+//   processing under concurrent Stripe retries.
 //
 // Bug 2 — FIXED: createPaymentIntent() now creates the DB record first (with
 //   stripePaymentIntentId: null), then calls stripe.paymentIntents.create(), then updates
@@ -73,29 +71,33 @@ const handleWebhook = async (req, res) => {
   }
 
   try {
-    const existingEvent = await prisma.processedEvent.findUnique({
-      where: { eventId: event.id }
-    });
+    let shouldProcess = true;
 
-    if (existingEvent) {
-      console.log(`Event ${event.id} already processed, skipping`);
-      return res.json({ received: true });
+    try {
+      await prisma.processedEvent.create({
+        data: { eventId: event.id, eventType: event.type }
+      });
+    } catch (createErr) {
+      if (createErr.code === 'P2002' && createErr.meta?.target?.includes('eventId')) {
+        console.log(`Event ${event.id} already processed, skipping`);
+        shouldProcess = false;
+      } else {
+        throw createErr;
+      }
     }
 
-    switch (event.type) {
-      case 'payment_intent.succeeded':
-        await handlePaymentSuccess(event.data.object);
-        break;
-      case 'payment_intent.payment_failed':
-        await handlePaymentFailed(event.data.object);
-        break;
-      default:
-        console.log(`Unhandled event type: ${event.type}`);
+    if (shouldProcess) {
+      switch (event.type) {
+        case 'payment_intent.succeeded':
+          await handlePaymentSuccess(event.data.object);
+          break;
+        case 'payment_intent.payment_failed':
+          await handlePaymentFailed(event.data.object);
+          break;
+        default:
+          console.log(`Unhandled event type: ${event.type}`);
+      }
     }
-
-    await prisma.processedEvent.create({
-      data: { eventId: event.id, eventType: event.type }
-    });
 
     res.json({ received: true });
   } catch (error) {
