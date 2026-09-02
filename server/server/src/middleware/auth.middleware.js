@@ -45,14 +45,14 @@ const userCache = new LRUCache({
 const getUserWithCache = async (userId) => {
   const cached = userCache.get(userId);
   if (cached) {
-    return [cached, true];
+    return cached;
   }
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (user) {
     userCache.set(userId, user);
   }
-  return [user, false];
+  return user;
 };
 
 const clearUserCache = (userId) => {
@@ -128,27 +128,26 @@ const authenticate = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const [user, wasFromCache] = await getUserWithCache(decoded.userId);
+    const user = await getUserWithCache(decoded.userId);
 
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Only validate staleness if the user came from cache. If we just fetched it
-    // from the DB (cache miss), it's already fresh and we don't need a second query.
-    let effectiveUser = user;
-    if (wasFromCache) {
-      const freshUser = await prisma.user.findUnique({ where: { id: user.id } });
-      if (!freshUser) {
-        return res.status(401).json({ error: 'User not found' });
-      }
-
-      const isStale = user.role !== freshUser.role || user.isSuspended !== freshUser.isSuspended;
-      if (isStale) {
-        clearUserCache(decoded.userId);
-        effectiveUser = freshUser;
-      }
+    // Validate cached role/isSuspended against the current DB state. If a mismatch
+    // is found (e.g., the user was demoted or suspended since the cache was populated),
+    // discard the stale entry and use the fresh record for this request.
+    const freshUser = await prisma.user.findUnique({ where: { id: user.id } });
+    if (!freshUser) {
+      return res.status(401).json({ error: 'User not found' });
     }
+
+    const isStale = user.role !== freshUser.role || user.isSuspended !== freshUser.isSuspended;
+    if (isStale) {
+      clearUserCache(decoded.userId);
+    }
+
+    const effectiveUser = isStale ? freshUser : user;
 
     req.user = {
       id: effectiveUser.id,
