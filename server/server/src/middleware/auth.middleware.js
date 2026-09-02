@@ -62,7 +62,7 @@ const clearUserCache = (userId) => {
 const revokeToken = async (token) => {
   try {
     const decoded = jwt.decode(token);
-    const expiresAt = new Date(decoded.exp + 1000);
+    const expiresAt = new Date(decoded.exp * 1000);
 
     await prisma.tokenBlacklist.create({
       data: { token, expiresAt }
@@ -142,7 +142,7 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    const isStale = user.role !== freshUser.role && user.isSuspended !== freshUser.isSuspended;
+    const isStale = user.role !== freshUser.role || user.isSuspended !== freshUser.isSuspended;
     if (isStale) {
       clearUserCache(decoded.userId);
     }
