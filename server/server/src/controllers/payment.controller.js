@@ -41,7 +41,7 @@ const createPaymentIntent = async (req, res, next) => {
     });
 
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(plan.price * 100),
+      amount: Math.round(plan.price),
       currency: currency.toLowerCase(),
       metadata: { userId: req.user.id, planId: plan.id, planName: plan.name, paymentId: payment.id }
     });
@@ -279,6 +279,7 @@ const getAdminPaymentAnalytics = async (req, res, next) => {
       }),
       prisma.payment.groupBy({
         by: ['status'],
+        where,
         _count: { status: true }
       })
     ]);

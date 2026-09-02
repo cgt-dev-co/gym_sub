@@ -63,7 +63,7 @@ model Payment {
   subscriptionId        String?
   amount                Float
   currency              String        @default("USD")
-  status                PaymentStatus @default(PENDING)
+  status                PaymentStatus @default(COMPLETED)
   stripePaymentIntentId String?
   paymentMethod         String        @default("card")
   createdAt             DateTime      @default(now())
